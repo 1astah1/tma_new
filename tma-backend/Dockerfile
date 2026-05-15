@@ -10,5 +10,9 @@ FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /app
 COPY --from=builder /app/server .
+RUN mkdir -p /app/uploads
 EXPOSE 8080
+ENV SERVER_PORT=8080
+ENV SERVER_HOST=0.0.0.0
+ENV ENVIRONMENT=production
 CMD ["./server"]
