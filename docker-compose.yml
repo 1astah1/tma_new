@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: tma_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tma_shop
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - tma_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tma_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - tma_network
+
+  backend:
+    build:
+      context: ./tma-backend
+      dockerfile: Dockerfile
+    container_name: tma_backend
+    environment:
+      - SERVER_PORT=8080
+      - SERVER_HOST=0.0.0.0
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/tma_shop?sslmode=disable
+      - JWT_SECRET=super-secret-key-min-32-chars-long!!
+      - ENVIRONMENT=production
+      - UPLOAD_DIR=/app/uploads
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - tma_network
+
+  frontend:
+    build:
+      context: ./tma-frontend
+      dockerfile: Dockerfile
+    container_name: tma_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - tma_network
+
+volumes:
+  pg_data:
+  uploads_data:
+
+networks:
+  tma_network:
+    driver: bridge
