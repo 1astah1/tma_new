@@ -37,7 +37,7 @@ export const dataProvider: DataProvider = {
       method: 'POST',
       body: JSON.stringify(params.data),
     })
-    return { data: { ...params.data, id: json.id } }
+    return { data: { ...params.data, id: json.id } as any }
   },
 
   update: async (resource, params) => {
@@ -50,7 +50,7 @@ export const dataProvider: DataProvider = {
 
   delete: async (resource, params) => {
     await httpClient(`${apiUrl}/${resource}/${params.id}`, { method: 'DELETE' })
-    return { data: { id: params.id } }
+    return { data: { id: params.id } as any }
   },
 
   getMany: async (resource, params) => {
