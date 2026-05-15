@@ -1,0 +1,22 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildEnvironment": "V3",
+    "rootDirectory": "tma-backend"
+  },
+  "deploy": {
+    "runtime": "V2",
+    "numReplicas": 1,
+    "sleepApplication": false,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "env": {
+      "SERVER_PORT": "8080",
+      "SERVER_HOST": "0.0.0.0",
+      "ENVIRONMENT": "production"
+    }
+  }
+}
