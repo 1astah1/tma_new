@@ -1,10 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"tma-backend/internal/bot"
 	"tma-backend/internal/config"
@@ -23,6 +25,7 @@ import (
 	"tma-backend/internal/handler/admin"
 	"tma-backend/internal/handler/public"
 	h "tma-backend/internal/handler"
+	"tma-backend/internal/logger"
 	"tma-backend/internal/middleware"
 	"tma-backend/internal/repository"
 	"tma-backend/internal/service"
@@ -31,10 +34,13 @@ import (
 func main() {
 	cfg := config.Load()
 
+	logger.Init(cfg.App.Environment)
+
 	// Database connection
 	db, err := sqlx.Connect("postgres", cfg.Database.URL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		slog.Error("Failed to connect to database", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -42,7 +48,7 @@ func main() {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	log.Printf("Connected to database: %s", cfg.Database.URL)
+	slog.Info("Connected to database", slog.String("database", cfg.Database.URL))
 
 	// Repositories
 	userRepo := repository.NewUserRepo(db)
@@ -52,6 +58,9 @@ func main() {
 	adminRepo := repository.NewAdminRepo(db)
 	accountRepo := repository.NewAccountRepo(db)
 	settingsRepo := repository.NewSettingsRepo(db)
+	promoRepo := repository.NewPromoCodeRepo(db)
+	chatRepo := repository.NewChatRepo(db)
+	templateRepo := repository.NewTemplateRepo(db)
 
 	// Services
 	encSvc := service.NewEncryptionService(cfg.Telegram.EncryptKey)
@@ -59,15 +68,17 @@ func main() {
 	notifSvc := service.NewNotificationService(cfg.Telegram.BotToken)
 	auditSvc := service.NewAuditService(adminRepo)
 	productSvc := service.NewProductService(productRepo)
-	orderSvc := service.NewOrderService(db, orderRepo, productRepo, keyRepo, accountRepo, userRepo, encSvc, notifSvc, auditSvc)
+	orderSvc := service.NewOrderService(db, orderRepo, productRepo, keyRepo, accountRepo, userRepo, chatRepo, encSvc, notifSvc, auditSvc)
+	promoSvc := service.NewPromoService(promoRepo)
 
 	// Start background workers
 	go func() {
+		ctx := context.Background()
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			orderSvc.Expire2FACodes(nil)
-			orderSvc.ExpireUnpaidOrders(nil)
+			orderSvc.Expire2FACodes(ctx)
+			orderSvc.ExpireUnpaidOrders(ctx)
 		}
 	}()
 
@@ -80,22 +91,35 @@ func main() {
 	// Router
 	r := chi.NewRouter()
 
-	// Global middleware
-	r.Use(middleware.Logging)
-	r.Use(middleware.CORS("*"))
+	// Metrics middleware (applied to all routes)
+	r.Use(middleware.Metrics)
 
-	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		h.RespondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
+	// Global middleware
+	r.Use(middleware.RequestID)
+	r.Use(middleware.Recover())
+	r.Use(middleware.Logging)
+	r.Use(middleware.CORS(cfg.App.TMAURL, cfg.App.AdminURL))
+
+	// Rate limiter: 10 requests per second, burst of 20
+	rateLimiter := middleware.NewRateLimiter(10, 20)
+
+	// Health checks
+	healthHandler := h.NewHealthHandler(db)
+	r.Get("/health", healthHandler.Liveness)
+	r.Get("/health/ready", healthHandler.Readiness)
+
+	// Prometheus metrics
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Public API (TMA)
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth
-		r.Post("/auth/telegram", handleTelegramAuth(authSvc, userRepo))
+		r.Post("/auth/telegram", func(w http.ResponseWriter, r *http.Request) {
+			rateLimiter.Middleware(http.HandlerFunc(handleTelegramAuth(authSvc, userRepo))).ServeHTTP(w, r)
+		})
 
 			// Public
-		productHandler := public.NewProductHandler(productSvc)
+		productHandler := public.NewProductHandler(productSvc, productRepo)
 		r.Get("/products", productHandler.List)
 		r.Get("/products/{id}", productHandler.GetByID)
 		r.Get("/platforms", productHandler.GetPlatforms)
@@ -104,22 +128,55 @@ func main() {
 		publicPaymentHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo)
 		r.Get("/payments/details", publicPaymentHandler.GetPaymentDetails)
 
+		// Promo codes
+		promoHandler := public.NewPromoHandler(promoSvc)
+		r.Post("/promo/validate", promoHandler.Validate)
+
 		// Protected routes
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.UserAuth(authSvc))
+			r.Use(middleware.UserAuth(authSvc, cfg.App.Environment))
 
-			orderHandler := public.NewOrderHandler(orderSvc)
-			r.Post("/orders", orderHandler.Create)
+			orderHandler := public.NewOrderHandler(orderSvc, cfg.UploadDir)
+			r.Post("/orders", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.Create)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/batch", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.CreateBatch)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/batch/confirm-payment", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmBatchPayment)).ServeHTTP(w, r)
+			})
 			r.Get("/orders", orderHandler.List)
 			r.Get("/orders/{id}", orderHandler.GetByID)
-			r.Post("/orders/{id}/confirm-payment", orderHandler.ConfirmPayment)
-			r.Post("/orders/{id}/credentials", orderHandler.SendCredentials)
-			r.Post("/orders/{id}/2fa-code", orderHandler.Send2FACode)
+			r.Post("/orders/{id}/confirm-payment", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmPayment)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/{id}/credentials", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.SendCredentials)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/{id}/2fa-code", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.Send2FACode)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.CancelOrder)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/{id}/refund", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.RequestRefund)).ServeHTTP(w, r)
+			})
+			r.Get("/orders/{id}/chat", orderHandler.GetChatMessages)
+			r.Post("/orders/{id}/chat", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.SendChatMessage)).ServeHTTP(w, r)
+			})
 
 			profileHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo)
 			r.Get("/profile", profileHandler.GetProfile)
 			r.Get("/payment-details", profileHandler.GetPaymentDetails)
 		})
+
+		// Public FAQ (no auth required)
+		faqHandler := public.NewFAQHandler(templateRepo)
+		r.Get("/faq", faqHandler.ListFAQ)
+		r.Get("/faq/answer", faqHandler.GetFAQAnswer)
 	})
 
 	// Serve uploaded files
@@ -127,18 +184,21 @@ func main() {
 
 	// Admin API
 	r.Route("/api/v1/admin", func(r chi.Router) {
-		authHandler := admin.NewAuthHandler(authSvc)
-		r.Post("/auth/login", authHandler.Login)
+		bruteForce := middleware.NewBruteForceProtector(5, 15*time.Minute)
+		authHandler := admin.NewAuthHandler(authSvc, bruteForce)
+		r.Post("/auth/login", func(w http.ResponseWriter, r *http.Request) {
+			bruteForce.Middleware(http.HandlerFunc(authHandler.Login)).ServeHTTP(w, r)
+		})
 
 		r.Post("/upload", handleFileUpload(cfg.UploadDir))
 
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.AdminAuth(authSvc))
+			r.Use(middleware.AdminAuth(authSvc, cfg.App.Environment))
 
 			r.Get("/auth/me", authHandler.Me)
 
 			// Products (admin CRUD)
-			adminProductHandler := admin.NewAdminProductHandler(productSvc)
+			adminProductHandler := admin.NewAdminProductHandler(productSvc, productRepo)
 			r.Get("/products", adminProductHandler.List)
 			r.Get("/products/{id}", adminProductHandler.GetByID)
 			r.Post("/products", adminProductHandler.Create)
@@ -150,16 +210,24 @@ func main() {
 			r.Get("/dashboard", dashHandler.GetStats)
 
 			// Orders
-			orderHandler := admin.NewOrderHandler(orderSvc)
+			orderHandler := admin.NewOrderHandler(orderSvc, orderRepo, keyRepo, adminRepo, encSvc, templateRepo)
 			r.Get("/orders", orderHandler.List)
 			r.Get("/orders/{id}", orderHandler.GetByID)
 			r.Patch("/orders/{id}/status", orderHandler.UpdateStatus)
+			r.Patch("/orders/bulk-status", orderHandler.BulkUpdateStatus)
 			r.Post("/orders/{id}/decrypt-credentials", orderHandler.DecryptCredentials)
+			r.Get("/orders/{id}/available-keys", orderHandler.GetAvailableKeys)
+			r.Post("/orders/{id}/assign-key", orderHandler.AssignSpecificKey)
+			r.Get("/orders/{id}/chat", orderHandler.GetChatMessages)
+			r.Post("/orders/{id}/chat", orderHandler.SendChatMessage)
+			r.Post("/orders/{id}/chat/template", orderHandler.SendTemplateMessage)
 
 			// Users & Admins
 			userHandler := admin.NewAdminUserHandler(userRepo, adminRepo, accountRepo)
 			r.Get("/users", userHandler.ListUsers)
 			r.Get("/users/{id}", userHandler.GetUser)
+			r.Get("/users/{id}/stats", userHandler.GetUserStats)
+			r.Patch("/users/{id}", userHandler.UpdateUser)
 			r.Get("/admins", userHandler.ListAdmins)
 			r.Post("/admins", userHandler.CreateAdmin)
 			r.Put("/admins/{id}", userHandler.UpdateAdmin)
@@ -168,6 +236,43 @@ func main() {
 			settingsHandler := admin.NewSettingsHandler(settingsRepo)
 			r.Get("/settings", settingsHandler.Get)
 			r.Put("/settings", settingsHandler.Upsert)
+
+			// Promo codes (admin)
+			adminPromoHandler := admin.NewPromoHandler(promoSvc)
+			r.Get("/promos", adminPromoHandler.List)
+			r.Get("/promos/{id}", adminPromoHandler.GetByID)
+			r.Post("/promos", adminPromoHandler.Create)
+			r.Put("/promos/{id}", adminPromoHandler.Update)
+			r.Delete("/promos/{id}", adminPromoHandler.Delete)
+
+			// Keys (admin)
+			keyHandler := admin.NewKeyHandler(keyRepo)
+			r.Get("/keys", keyHandler.List)
+			r.Get("/keys/{id}", keyHandler.GetByID)
+			r.Post("/keys", keyHandler.Create)
+			r.Post("/keys/import", keyHandler.BulkImport)
+			r.Patch("/keys/{id}/status", keyHandler.UpdateStatus)
+			r.Patch("/keys/{id}", keyHandler.UpdateKey)
+			r.Post("/keys/{id}/release", keyHandler.ReleaseKey)
+			r.Delete("/keys/{id}", keyHandler.Delete)
+			r.Post("/keys/bulk-delete", keyHandler.BulkDelete)
+
+			// Product keys (admin)
+			r.Get("/products/{product_id}/keys", keyHandler.GetByProductID)
+			r.Get("/products/{product_id}/keys/stats", keyHandler.GetProductKeyStats)
+
+			// Templates & FAQ
+			templateHandler := admin.NewTemplateHandler(templateRepo)
+			r.Get("/templates", templateHandler.ListTemplates)
+			r.Get("/templates/{id}", templateHandler.GetTemplate)
+			r.Post("/templates", templateHandler.CreateTemplate)
+			r.Put("/templates/{id}", templateHandler.UpdateTemplate)
+			r.Delete("/templates/{id}", templateHandler.DeleteTemplate)
+			r.Get("/faq-items", templateHandler.ListFAQ)
+			r.Get("/faq-items/{id}", templateHandler.GetFAQ)
+			r.Post("/faq-items", templateHandler.CreateFAQ)
+			r.Put("/faq-items/{id}", templateHandler.UpdateFAQ)
+			r.Delete("/faq-items/{id}", templateHandler.DeleteFAQ)
 
 			// Logs
 			r.Get("/logs", userHandler.GetLogs)
@@ -194,13 +299,13 @@ func main() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
-		log.Println("Shutting down server...")
+		slog.Info("Shutting down server...")
 		server.Close()
 	}()
 
-	log.Printf("Server starting on %s", addr)
+	slog.Info("Server starting", slog.String("addr", addr))
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("Server error", slog.String("error", err.Error()))
 	}
 }
 

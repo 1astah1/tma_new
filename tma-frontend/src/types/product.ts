@@ -1,3 +1,10 @@
+export interface ProductVariant {
+  id: string
+  name: string
+  price: number
+  stock: number
+}
+
 export interface Product {
   id: string
   title: string
@@ -5,6 +12,8 @@ export interface Product {
   platform: 'ps4' | 'ps5' | 'xbox'
   type: 'game' | 'currency' | 'subscription'
   price: number
+  discount_percent: number
+  variants: ProductVariant[]
   image_url: string | null
   delivery_methods: ('key' | 'activation')[]
   status: 'active' | 'inactive'
@@ -25,7 +34,7 @@ export const typeLabels: Record<string, string> = {
 }
 
 export const platformColors: Record<string, string> = {
-  ps4: 'bg-blue-100 text-blue-800',
-  ps5: 'bg-indigo-100 text-indigo-800',
-  xbox: 'bg-green-100 text-green-800',
+  ps4: 'bg-blue-500/20 text-blue-300',
+  ps5: 'bg-indigo-500/20 text-indigo-300',
+  xbox: 'bg-green-500/20 text-green-300',
 }

@@ -12,18 +12,18 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 	"tma-backend/internal/config"
 	"tma-backend/internal/domain"
-	"tma-backend/internal/repository"
 )
 
 type AuthService struct {
-	cfg    *config.Config
-	userRepo *repository.UserRepo
-	adminRepo *repository.AdminRepo
+	cfg       *config.Config
+	userRepo  UserStore
+	adminRepo AdminStore
 }
 
-func NewAuthService(cfg *config.Config, userRepo *repository.UserRepo, adminRepo *repository.AdminRepo) *AuthService {
+func NewAuthService(cfg *config.Config, userRepo UserStore, adminRepo AdminStore) *AuthService {
 	return &AuthService{cfg: cfg, userRepo: userRepo, adminRepo: adminRepo}
 }
 
@@ -116,6 +116,12 @@ func (s *AuthService) AdminLogin(ctx context.Context, telegramID int64, password
 	}
 	if !admin.IsActive {
 		return nil, "", domain.ErrForbidden
+	}
+
+	if admin.PasswordHash != nil {
+		if err := bcrypt.CompareHashAndPassword([]byte(*admin.PasswordHash), []byte(password)); err != nil {
+			return nil, "", domain.ErrUnauthorized
+		}
 	}
 
 	claims := AdminClaims{

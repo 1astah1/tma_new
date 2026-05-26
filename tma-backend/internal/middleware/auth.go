@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -10,12 +11,27 @@ import (
 	"tma-backend/internal/service"
 )
 
-func UserAuth(authSvc *service.AuthService) func(http.Handler) http.Handler {
+func UserAuth(authSvc *service.AuthService, env string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractToken(r)
 			if tokenStr == "" {
 				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Missing token")
+				return
+			}
+
+			if tokenStr == "mock-token-for-dev" {
+				if env != "development" {
+					slog.Warn("Dev token used in non-development environment",
+						slog.String("environment", env),
+						slog.String("remote_addr", r.RemoteAddr),
+					)
+					handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Dev token not allowed in production")
+					return
+				}
+				testUserID := uuid.MustParse("4156f60b-c2f9-4e01-9f6e-37b685b23777")
+				ctx := context.WithValue(r.Context(), handler.UserIDKey, testUserID)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
@@ -37,7 +53,7 @@ func UserAuth(authSvc *service.AuthService) func(http.Handler) http.Handler {
 	}
 }
 
-func AdminAuth(authSvc *service.AuthService) func(http.Handler) http.Handler {
+func AdminAuth(authSvc *service.AuthService, env string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractToken(r)

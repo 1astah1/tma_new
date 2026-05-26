@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,6 +68,8 @@ const (
 	OrderStatusCancelled          OrderStatus = "CANCELLED"
 	OrderStatusRefundRequested    OrderStatus = "REFUND_REQUESTED"
 	OrderStatusRefunded           OrderStatus = "REFUNDED"
+	OrderStatusCredentialsInvalid OrderStatus = "CREDENTIALS_INVALID"
+	OrderStatusInvalid2FA         OrderStatus = "INVALID_2FA"
 )
 
 type User struct {
@@ -79,18 +82,27 @@ type User struct {
 	UpdatedAt       time.Time  `db:"updated_at" json:"updated_at"`
 }
 
+type ProductVariant struct {
+	ID    string  `json:"id"`
+	Name  string  `json:"name"`
+	Price float64 `json:"price"`
+	Stock int     `json:"stock"`
+}
+
 type Product struct {
-	ID              uuid.UUID       `db:"id" json:"id"`
-	Title           string          `db:"title" json:"title"`
-	Description     *string         `db:"description" json:"description"`
-	Platform        Platform        `db:"platform" json:"platform"`
-	Type            ProductType     `db:"type" json:"type"`
-	Price           float64         `db:"price" json:"price"`
-	ImageURL        *string         `db:"image_url" json:"image_url"`
-	DeliveryMethods pq.StringArray  `db:"delivery_methods" json:"delivery_methods"`
-	Status          ProductStatus   `db:"status" json:"status"`
-	CreatedAt       time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt       time.Time       `db:"updated_at" json:"updated_at"`
+	ID              uuid.UUID      `db:"id" json:"id"`
+	Title           string         `db:"title" json:"title"`
+	Description     *string        `db:"description" json:"description"`
+	Platform        Platform       `db:"platform" json:"platform"`
+	Type            ProductType    `db:"type" json:"type"`
+	Price           float64        `db:"price" json:"price"`
+	DiscountPercent float64        `db:"discount_percent" json:"discount_percent"`
+	Variants        json.RawMessage `db:"variants" json:"variants"`
+	ImageURL        *string        `db:"image_url" json:"image_url"`
+	DeliveryMethods pq.StringArray `db:"delivery_methods" json:"delivery_methods"`
+	Status          ProductStatus  `db:"status" json:"status"`
+	CreatedAt       time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time      `db:"updated_at" json:"updated_at"`
 }
 
 type ProductKey struct {
@@ -106,6 +118,8 @@ type Order struct {
 	ID                uuid.UUID     `db:"id" json:"id"`
 	UserID            uuid.UUID     `db:"user_id" json:"user_id"`
 	ProductID         uuid.UUID     `db:"product_id" json:"product_id"`
+	VariantID         *string       `db:"variant_id" json:"variant_id"`
+	Quantity          int           `db:"quantity" json:"quantity"`
 	DeliveryMethod    DeliveryMethod `db:"delivery_method" json:"delivery_method"`
 	Status            OrderStatus   `db:"status" json:"status"`
 	PaymentMethod     *string       `db:"payment_method" json:"payment_method"`
@@ -120,6 +134,7 @@ type Order struct {
 	// Joined fields
 	Product    *Product `db:"-" json:"product,omitempty"`
 	User       *User    `db:"-" json:"user,omitempty"`
+	KeyValue   *string  `db:"-" json:"key_value,omitempty"`
 }
 
 type OrderHistory struct {
@@ -177,4 +192,33 @@ type PaymentTransaction struct {
 	Status     TransactionStatus `db:"status" json:"status"`
 	VerifiedBy *uuid.UUID        `db:"verified_by" json:"verified_by"`
 	CreatedAt  time.Time         `db:"created_at" json:"created_at"`
+}
+
+type ChatMessage struct {
+	ID         uuid.UUID `db:"id" json:"id"`
+	OrderID    uuid.UUID `db:"order_id" json:"order_id"`
+	SenderType string    `db:"sender_type" json:"sender_type"`
+	SenderID   uuid.UUID `db:"sender_id" json:"sender_id"`
+	Message    string    `db:"message" json:"message"`
+	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+}
+
+type ChatTemplate struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Title     string    `db:"title" json:"title"`
+	Message   string    `db:"message" json:"message"`
+	Category  string    `db:"category" json:"category"`
+	IsActive  bool      `db:"is_active" json:"is_active"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type FAQItem struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Question  string    `db:"question" json:"question"`
+	Answer    string    `db:"answer" json:"answer"`
+	IsActive  bool      `db:"is_active" json:"is_active"`
+	SortOrder int       `db:"sort_order" json:"sort_order"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }

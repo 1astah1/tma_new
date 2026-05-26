@@ -1,0 +1,2 @@
+-- Remove invalid statuses from enum (requires recreating the type)
+-- This is a no-op for safety; statuses can remain in enum without issue

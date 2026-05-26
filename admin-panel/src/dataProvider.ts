@@ -2,9 +2,10 @@ import { DataProvider, fetchUtils } from 'react-admin'
 
 const apiUrl = '/api/v1/admin'
 const httpClient = (url: string, options: fetchUtils.Options = {}) => {
-  if (!options.headers) options.headers = new Headers()
   const token = localStorage.getItem('token')
-  if (token) (options.headers as Headers).set('Authorization', `Bearer ${token}`)
+  const headers = new Headers(options.headers as HeadersInit)
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  options.headers = headers
   return fetchUtils.fetchJson(url, options)
 }
 
@@ -29,7 +30,10 @@ export const dataProvider: DataProvider = {
     const { json } = await httpClient(`${apiUrl}/${resource}/${params.id}`)
     const order = json.order || json
     const history = json.history || []
-    return { data: { ...order, history } }
+    const account = json.account || null
+    const key = json.key || null
+    const assigned_admin = json.assigned_admin || null
+    return { data: { ...order, history, account, key, assigned_admin } }
   },
 
   create: async (resource, params) => {

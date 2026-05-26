@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"tma-backend/internal/domain"
 	"tma-backend/internal/handler"
 	"tma-backend/internal/repository"
@@ -93,8 +94,14 @@ func (h *AdminUserHandler) CreateAdmin(w http.ResponseWriter, r *http.Request) {
 		Roles:      req.Roles,
 		IsActive:   true,
 	}
-	// In production, hash the password
-	admin.PasswordHash = &req.Password
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to hash password")
+		return
+	}
+	hashStr := string(hashed)
+	admin.PasswordHash = &hashStr
 
 	if err := h.adminRepo.Create(r.Context(), admin); err != nil {
 		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -161,6 +168,80 @@ func (h *AdminUserHandler) GetLogs(w http.ResponseWriter, r *http.Request) {
 			"limit": f.Limit,
 			"total": total,
 		},
+	})
+}
+
+func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid user ID")
+		return
+	}
+
+	var req struct {
+		IsBanned    *bool   `json:"is_banned"`
+		AdminNotes  *string `json:"admin_notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid JSON")
+		return
+	}
+
+	if req.IsBanned != nil {
+		if err := h.userRepo.UpdateBan(r.Context(), id, *req.IsBanned); err != nil {
+			handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update ban status")
+			return
+		}
+	}
+
+	if req.AdminNotes != nil {
+		if err := h.userRepo.UpdateAdminNotes(r.Context(), id, *req.AdminNotes); err != nil {
+			handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update notes")
+			return
+		}
+	}
+
+	handler.RespondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *AdminUserHandler) GetUserOrders(w http.ResponseWriter, r *http.Request) {
+	_, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid user ID")
+		return
+	}
+
+	q := r.URL.Query()
+	page, _ := parseInt(q.Get("page"), 1)
+	limit, _ := parseInt(q.Get("limit"), 20)
+
+	orders, total, err := h.userRepo.List(r.Context(), "", page, limit)
+	if err != nil {
+		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+
+	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"data": orders,
+		"meta": map[string]interface{}{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+		},
+	})
+}
+
+func (h *AdminUserHandler) GetUserStats(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid user ID")
+		return
+	}
+
+	totalOrders, _ := h.userRepo.CountOrders(r.Context(), id)
+
+	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"total_orders": totalOrders,
 	})
 }
 

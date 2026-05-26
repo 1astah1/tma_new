@@ -9,10 +9,10 @@ import (
 )
 
 type ProductService struct {
-	repo *repository.ProductRepo
+	repo ProductStore
 }
 
-func NewProductService(repo *repository.ProductRepo) *ProductService {
+func NewProductService(repo ProductStore) *ProductService {
 	return &ProductService{repo: repo}
 }
 
@@ -32,6 +32,9 @@ func (s *ProductService) Create(ctx context.Context, p *domain.Product) error {
 		return domain.ErrInvalidInput
 	}
 	if len(p.DeliveryMethods) == 0 {
+		return domain.ErrInvalidInput
+	}
+	if p.DiscountPercent < 0 || p.DiscountPercent > 100 {
 		return domain.ErrInvalidInput
 	}
 	return s.repo.Create(ctx, p)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -13,35 +14,37 @@ import (
 
 type OrderService struct {
 	db         *sqlx.DB
-	orderRepo  *repository.OrderRepo
-	productRepo *repository.ProductRepo
-	keyRepo    *repository.KeyRepo
-	accountRepo *repository.AccountRepo
-	userRepo   *repository.UserRepo
-	encSvc     *EncryptionService
-	notifSvc   *NotificationService
-	auditSvc   *AuditService
+	orderRepo  OrderStore
+	productRepo ProductStore
+	keyRepo    KeyStore
+	accountRepo AccountStore
+	userRepo   UserStore
+	chatRepo   ChatStore
+	encSvc     Encryptor
+	notifSvc   Notifier
+	auditSvc   Auditor
 }
 
 func NewOrderService(
 	db *sqlx.DB,
-	orderRepo *repository.OrderRepo,
-	productRepo *repository.ProductRepo,
-	keyRepo *repository.KeyRepo,
-	accountRepo *repository.AccountRepo,
-	userRepo *repository.UserRepo,
-	encSvc *EncryptionService,
-	notifSvc *NotificationService,
-	auditSvc *AuditService,
+	orderRepo OrderStore,
+	productRepo ProductStore,
+	keyRepo KeyStore,
+	accountRepo AccountStore,
+	userRepo UserStore,
+	chatRepo ChatStore,
+	encSvc Encryptor,
+	notifSvc Notifier,
+	auditSvc Auditor,
 ) *OrderService {
 	return &OrderService{
 		db: db, orderRepo: orderRepo, productRepo: productRepo,
-		keyRepo: keyRepo, accountRepo: accountRepo, userRepo: userRepo,
+		keyRepo: keyRepo, accountRepo: accountRepo, userRepo: userRepo, chatRepo: chatRepo,
 		encSvc: encSvc, notifSvc: notifSvc, auditSvc: auditSvc,
 	}
 }
 
-func (s *OrderService) CreateOrder(ctx context.Context, userID, productID uuid.UUID, deliveryMethod domain.DeliveryMethod) (*domain.Order, error) {
+func (s *OrderService) CreateOrder(ctx context.Context, userID, productID uuid.UUID, deliveryMethod domain.DeliveryMethod, variantID *string, quantity int) (*domain.Order, error) {
 	product, err := s.productRepo.GetByID(ctx, productID)
 	if err != nil {
 		return nil, domain.ErrNotFound
@@ -61,19 +64,90 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID, productID uuid.U
 		return nil, domain.ErrInvalidInput
 	}
 
+	if deliveryMethod == domain.DeliveryMethodKey {
+		available, err := s.keyRepo.CountAvailable(ctx, productID)
+		if err != nil {
+			return nil, err
+		}
+		if available == 0 {
+			return nil, domain.ErrKeyNotAvailable
+		}
+	}
+
+	if quantity < 1 {
+		quantity = 1
+	}
+
+	var unitPrice float64 = product.Price
+
+	// Apply variant price if selected
+	if variantID != nil && len(product.Variants) > 0 {
+		type Variant struct {
+			ID    string  `json:"id"`
+			Name  string  `json:"name"`
+			Price float64 `json:"price"`
+		}
+		var variants []Variant
+		if err := json.Unmarshal(product.Variants, &variants); err == nil {
+			for _, v := range variants {
+				if v.ID == *variantID {
+					unitPrice = v.Price
+					break
+				}
+			}
+		}
+	}
+
+	// Apply discount
+	if product.DiscountPercent > 0 {
+		unitPrice = unitPrice * (1 - float64(product.DiscountPercent)/100)
+	}
+
+	totalAmount := unitPrice * float64(quantity)
+
 	order := &domain.Order{
 		UserID:         userID,
 		ProductID:      productID,
+		VariantID:      variantID,
+		Quantity:       quantity,
 		DeliveryMethod: deliveryMethod,
 		Status:         domain.OrderStatusNew,
+		PaymentAmount:  &totalAmount,
 	}
 
-	if err := s.orderRepo.Create(ctx, order); err != nil {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if err := s.orderRepo.CreateInTx(tx, order); err != nil {
 		return nil, err
 	}
 
-	// Transition to WAITING_PAYMENT
-	s.changeStatus(ctx, order, domain.OrderStatusWaitingPayment, nil, domain.ChangedBySystem, "Order created")
+	// Transition to WAITING_PAYMENT within transaction
+	oldStatus := order.Status
+	order.Status = domain.OrderStatusWaitingPayment
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE orders SET status=$1, updated_at=NOW() WHERE id=$2", order.Status, order.ID); err != nil {
+		return nil, err
+	}
+
+	history := &domain.OrderHistory{
+		OrderID:       order.ID,
+		OldStatus:     &oldStatus,
+		NewStatus:     order.Status,
+		ChangedByID:   nil,
+		ChangedByType: domain.ChangedBySystem,
+		Comment:       strPtr("Order created"),
+	}
+	if err := s.orderRepo.AddHistoryInTx(tx, history); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 
 	go func() {
 		s.notifSvc.SendOrderStatusUpdate(context.Background(), order)
@@ -115,7 +189,17 @@ func (s *OrderService) IssueKey(ctx context.Context, orderID, adminID uuid.UUID)
 	}
 
 	order.KeyID = &key.ID
-	s.orderRepo.Update(ctx, order)
+	if err := s.orderRepo.Update(ctx, order); err != nil {
+		return err
+	}
+
+	msg := &domain.ChatMessage{
+		OrderID:    orderID,
+		SenderType: "admin",
+		SenderID:   adminID,
+		Message:    "Ваш ключ активации: " + key.Key,
+	}
+	s.chatRepo.Create(ctx, msg)
 
 	if err := s.changeStatus(ctx, order, domain.OrderStatusKeyIssued, &adminID, domain.ChangedByAdmin, "Key issued"); err != nil {
 		return err
@@ -146,7 +230,7 @@ func (s *OrderService) ReceiveCredentials(ctx context.Context, orderID, userID u
 		return domain.ErrNotFound
 	}
 
-	if order.Status != domain.OrderStatusAwaitingCredentials {
+	if order.Status != domain.OrderStatusAwaitingCredentials && order.Status != domain.OrderStatusCredentialsInvalid {
 		return domain.ErrOrderStatusInvalid
 	}
 
@@ -159,16 +243,25 @@ func (s *OrderService) ReceiveCredentials(ctx context.Context, orderID, userID u
 		return err
 	}
 
-	account := &domain.UserAccount{
-		UserID:   userID,
-		OrderID:  orderID,
-		Platform: platform,
-		Login:    encLogin,
-		Password: encPassword,
-	}
-
-	if err := s.accountRepo.Create(ctx, account); err != nil {
-		return err
+	existing, err := s.accountRepo.GetByOrderID(ctx, orderID)
+	if err == nil && existing != nil {
+		existing.Login = encLogin
+		existing.Password = encPassword
+		existing.Platform = platform
+		if err := s.accountRepo.Update(ctx, existing); err != nil {
+			return err
+		}
+	} else {
+		account := &domain.UserAccount{
+			UserID:   userID,
+			OrderID:  orderID,
+			Platform: platform,
+			Login:    encLogin,
+			Password: encPassword,
+		}
+		if err := s.accountRepo.Create(ctx, account); err != nil {
+			return err
+		}
 	}
 
 	return s.changeStatus(ctx, order, domain.OrderStatusCredentialsReceived, nil, domain.ChangedByUser, "Credentials received")
@@ -193,13 +286,18 @@ func (s *OrderService) Receive2FA(ctx context.Context, orderID uuid.UUID, code s
 		return domain.ErrNotFound
 	}
 
-	if order.Status != domain.OrderStatusAwaiting2FA {
+	if order.Status != domain.OrderStatusAwaiting2FA && order.Status != domain.OrderStatusInvalid2FA {
 		return domain.ErrOrderStatusInvalid
 	}
 
 	account, err := s.accountRepo.GetByOrderID(ctx, orderID)
 	if err == nil {
-		s.accountRepo.Update2FACode(ctx, account.ID, &code)
+		encCode, err := s.encSvc.Encrypt([]byte(code))
+		if err != nil {
+			return err
+		}
+		codeStr := string(encCode)
+		s.accountRepo.Update2FACode(ctx, account.ID, &codeStr)
 	}
 
 	return s.changeStatus(ctx, order, domain.OrderStatusActivating, nil, domain.ChangedByUser, "2FA code received")
@@ -222,10 +320,23 @@ func (s *OrderService) CompleteActivation(ctx context.Context, orderID, adminID 
 	return s.changeStatus(ctx, order, domain.OrderStatusCompleted, &adminID, domain.ChangedBySystem, "Order completed")
 }
 
+func (s *OrderService) SimpleStatusChange(ctx context.Context, orderID, adminID uuid.UUID, newStatus domain.OrderStatus, comment string) error {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+
+	return s.changeStatus(ctx, order, newStatus, &adminID, domain.ChangedByAdmin, comment)
+}
+
 func (s *OrderService) CancelOrder(ctx context.Context, orderID, adminID uuid.UUID, reason string) error {
 	order, err := s.orderRepo.GetByID(ctx, orderID)
 	if err != nil {
 		return domain.ErrNotFound
+	}
+
+	if order.KeyID != nil {
+		s.keyRepo.ReleaseKey(ctx, *order.KeyID)
 	}
 
 	order.CancelledReason = &reason
@@ -247,10 +358,48 @@ func (s *OrderService) RequestRefund(ctx context.Context, orderID, adminID uuid.
 	return s.changeStatus(ctx, order, domain.OrderStatusRefundRequested, &adminID, domain.ChangedByAdmin, "Refund requested")
 }
 
+func (s *OrderService) CancelOrderByUser(ctx context.Context, orderID uuid.UUID, reason string) error {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+
+	allowable := map[domain.OrderStatus]bool{
+		domain.OrderStatusNew:              true,
+		domain.OrderStatusWaitingPayment:   true,
+		domain.OrderStatusPaymentVerification: true,
+	}
+	if !allowable[order.Status] {
+		return domain.ErrOrderStatusInvalid
+	}
+
+	order.CancelledReason = &reason
+	s.orderRepo.Update(ctx, order)
+
+	return s.changeStatus(ctx, order, domain.OrderStatusCancelled, nil, domain.ChangedByUser, reason)
+}
+
+func (s *OrderService) RequestRefundByUser(ctx context.Context, orderID uuid.UUID, reason string) error {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+
+	if !canRefund(order.Status) {
+		return domain.ErrOrderStatusInvalid
+	}
+
+	return s.changeStatus(ctx, order, domain.OrderStatusRefundRequested, nil, domain.ChangedByUser, reason)
+}
+
 func (s *OrderService) ProcessRefund(ctx context.Context, orderID, adminID uuid.UUID) error {
 	order, err := s.orderRepo.GetByID(ctx, orderID)
 	if err != nil {
 		return domain.ErrNotFound
+	}
+
+	if order.KeyID != nil {
+		s.keyRepo.ReleaseKey(ctx, *order.KeyID)
 	}
 
 	if order.Status != domain.OrderStatusRefundRequested {
@@ -262,7 +411,7 @@ func (s *OrderService) ProcessRefund(ctx context.Context, orderID, adminID uuid.
 
 func canRefund(status domain.OrderStatus) bool {
 	switch status {
-	case domain.OrderStatusPaid, domain.OrderStatusWaitingActivation,
+	case domain.OrderStatusPaymentVerification, domain.OrderStatusPaid, domain.OrderStatusWaitingActivation,
 		domain.OrderStatusAwaitingCredentials, domain.OrderStatusCredentialsReceived,
 		domain.OrderStatusAwaiting2FA, domain.OrderStatusActivating,
 		domain.OrderStatusActivated, domain.OrderStatusKeyIssued:
@@ -319,8 +468,8 @@ func (s *OrderService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Order
 	return s.orderRepo.GetByIDWithJoins(ctx, id)
 }
 
-func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, status *string, page, limit int) ([]domain.Order, int, error) {
-	return s.orderRepo.GetByUserID(ctx, userID, status, page, limit)
+func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, statuses []string, page, limit int) ([]domain.Order, int, error) {
+	return s.orderRepo.GetByUserID(ctx, userID, statuses, page, limit)
 }
 
 func (s *OrderService) List(ctx context.Context, f repository.OrderFilter) ([]domain.Order, int, error) {
@@ -403,4 +552,77 @@ func (s *OrderService) ExpireUnpaidOrders(ctx context.Context) {
 
 func (s *OrderService) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
 	return s.orderRepo.GetDashboardStats(ctx)
+}
+
+func (s *OrderService) GetAccount(ctx context.Context, orderID uuid.UUID) (*domain.UserAccount, error) {
+	return s.accountRepo.GetByOrderID(ctx, orderID)
+}
+
+func (s *OrderService) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.OrderStatus) error {
+	return s.orderRepo.UpdateStatus(ctx, id, status)
+}
+
+func (s *OrderService) AddHistory(ctx context.Context, h *domain.OrderHistory) error {
+	return s.orderRepo.AddHistory(ctx, h)
+}
+
+func (s *OrderService) BulkUpdateStatus(ctx context.Context, orderIDs []uuid.UUID, newStatus domain.OrderStatus, adminID uuid.UUID, comment string) (int, error) {
+	success := 0
+	for _, id := range orderIDs {
+		order, err := s.orderRepo.GetByID(ctx, id)
+		if err != nil {
+			continue
+		}
+		if !domain.IsValidTransition(order.Status, newStatus) {
+			continue
+		}
+		if err := s.SimpleStatusChange(ctx, id, adminID, newStatus, comment); err != nil {
+			continue
+		}
+		success++
+	}
+	return success, nil
+}
+
+func (s *OrderService) SendChatMessage(ctx context.Context, orderID, senderID uuid.UUID, senderType string, message string) error {
+	order, err := s.orderRepo.GetByID(ctx, orderID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+
+	allowable := map[domain.OrderStatus]bool{
+		domain.OrderStatusPaid:              true,
+		domain.OrderStatusWaitingActivation: true,
+		domain.OrderStatusAwaitingCredentials: true,
+		domain.OrderStatusCredentialsReceived: true,
+		domain.OrderStatusCredentialsInvalid:  true,
+		domain.OrderStatusAwaiting2FA:         true,
+		domain.OrderStatusInvalid2FA:          true,
+		domain.OrderStatusActivating:          true,
+		domain.OrderStatusActivated:           true,
+		domain.OrderStatusKeyIssued:           true,
+		domain.OrderStatusCompleted:           true,
+		domain.OrderStatusCancelled:           true,
+		domain.OrderStatusRefundRequested:     true,
+		domain.OrderStatusRefunded:            true,
+	}
+	if !allowable[order.Status] {
+		return domain.ErrOrderStatusInvalid
+	}
+
+	msg := &domain.ChatMessage{
+		OrderID:    orderID,
+		SenderType: senderType,
+		SenderID:   senderID,
+		Message:    message,
+	}
+	return s.chatRepo.Create(ctx, msg)
+}
+
+func (s *OrderService) GetChatMessages(ctx context.Context, orderID uuid.UUID) ([]domain.ChatMessage, error) {
+	return s.chatRepo.GetByOrderID(ctx, orderID)
+}
+
+func strPtr(s string) *string {
+	return &s
 }

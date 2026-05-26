@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -14,11 +15,12 @@ import (
 )
 
 type AdminProductHandler struct {
-	svc *service.ProductService
+	svc         *service.ProductService
+	productRepo *repository.ProductRepo
 }
 
-func NewAdminProductHandler(svc *service.ProductService) *AdminProductHandler {
-	return &AdminProductHandler{svc: svc}
+func NewAdminProductHandler(svc *service.ProductService, productRepo *repository.ProductRepo) *AdminProductHandler {
+	return &AdminProductHandler{svc: svc, productRepo: productRepo}
 }
 
 func (h *AdminProductHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +66,28 @@ func (h *AdminProductHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	type ProductWithCounts struct {
+		domain.Product
+		AvailableKeys int `json:"available_keys"`
+		OrderCount    int `json:"order_count"`
+	}
+
+	result := make([]ProductWithCounts, 0, len(products))
+	for _, p := range products {
+		pwc := ProductWithCounts{Product: p}
+		for _, dm := range p.DeliveryMethods {
+			if dm == "key" {
+				cnt, _ := h.productRepo.CountAvailableKeys(r.Context(), p.ID)
+				pwc.AvailableKeys = cnt
+				break
+			}
+		}
+		pwc.OrderCount, _ = h.productRepo.CountOrders(r.Context(), p.ID)
+		result = append(result, pwc)
+	}
+
 	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"data": products,
+		"data": result,
 		"meta": map[string]interface{}{
 			"page":  f.Page,
 			"limit": f.Limit,
@@ -114,12 +136,14 @@ func (h *AdminProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(existing); err != nil {
+		slog.Warn("Product update decode error", slog.String("error", err.Error()))
 		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid JSON")
 		return
 	}
 	existing.ID = id
 
 	if err := h.svc.Update(r.Context(), existing); err != nil {
+		slog.Error("Product update error", slog.String("error", err.Error()))
 		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}

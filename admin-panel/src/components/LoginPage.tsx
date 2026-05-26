@@ -1,4 +1,4 @@
-import { Login } from 'react-admin'
+import { Login, LoginForm } from 'react-admin'
 import { Box, Typography } from '@mui/material'
 
 export const LoginPage = () => (
@@ -8,5 +8,6 @@ export const LoginPage = () => (
       <Typography variant="h5" fontWeight="bold">COIN MINT</Typography>
       <Typography variant="body2" color="text.secondary">Admin Panel</Typography>
     </Box>
+    <LoginForm />
   </Login>
 )

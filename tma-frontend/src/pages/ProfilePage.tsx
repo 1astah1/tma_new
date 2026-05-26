@@ -17,13 +17,13 @@ export function ProfilePage() {
       <div className="p-4 space-y-4">
         <Card>
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-tg-button/20 rounded-full flex items-center justify-center text-2xl">
+            <div className="w-16 h-16 bg-[var(--tg-button)]/20 rounded-full flex items-center justify-center text-2xl">
               👤
             </div>
             <div>
               <div className="font-semibold text-lg">{profile?.username || 'Пользователь'}</div>
-              <div className="text-sm text-tg-hint">ID: {profile?.telegram_id}</div>
-              <div className="text-xs text-tg-hint">
+              <div className="text-sm text-[var(--tg-hint)]">ID: {profile?.telegram_id}</div>
+              <div className="text-xs text-[var(--tg-hint)]">
                 Зарегистрирован: {profile?.created_at ? formatDate(profile.created_at) : '-'}
               </div>
             </div>
@@ -33,21 +33,43 @@ export function ProfilePage() {
         <div className="space-y-2">
           <button
             onClick={() => nav('/orders')}
-            className="w-full flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:bg-gray-50"
+            className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"
           >
             <span className="text-xl">📋</span>
             <span className="font-medium">Мои заказы</span>
-            <span className="ml-auto text-tg-hint">→</span>
+            <span className="ml-auto text-[var(--tg-hint)]">→</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:bg-gray-50">
+          <button
+            onClick={() => nav('/cart')}
+            className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"
+          >
+            <span className="text-xl">🛒</span>
+            <span className="font-medium">Корзина</span>
+            <span className="ml-auto text-[var(--tg-hint)]">→</span>
+          </button>
+          <button
+            onClick={() => nav('/wishlist')}
+            className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"
+          >
+            <span className="text-xl">❤️</span>
+            <span className="font-medium">Избранное</span>
+            <span className="ml-auto text-[var(--tg-hint)]">→</span>
+          </button>
+          <button
+            onClick={() => nav('/support')}
+            className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"
+          >
             <span className="text-xl">💬</span>
             <span className="font-medium">Поддержка</span>
-            <span className="ml-auto text-tg-hint">→</span>
+            <span className="ml-auto text-[var(--tg-hint)]">→</span>
           </button>
-          <button className="w-full flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 hover:bg-gray-50">
+          <button
+            onClick={() => nav('/rules')}
+            className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"
+          >
             <span className="text-xl">📖</span>
             <span className="font-medium">Правила магазина</span>
-            <span className="ml-auto text-tg-hint">→</span>
+            <span className="ml-auto text-[var(--tg-hint)]">→</span>
           </button>
         </div>
       </div>

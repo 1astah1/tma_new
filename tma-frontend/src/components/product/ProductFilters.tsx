@@ -47,7 +47,7 @@ export function ProductFilters({ onFilter }: Props) {
       className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-300 ${
         isActive
           ? 'bg-gradient-to-br from-violet-600 to-purple-700 text-white shadow-lg shadow-purple-500/30'
-          : 'bg-white/5 backdrop-blur-sm border border-white/10 text-gray-300 hover:bg-white/10'
+          : 'bg-[var(--tg-input-bg)] backdrop-blur-sm border border-[var(--tg-input-border)] text-[var(--tg-hint)] hover:bg-[var(--tg-card)]'
       }`}
     >
       <img src={icon} alt="" className="w-5 h-5" />
@@ -56,7 +56,7 @@ export function ProductFilters({ onFilter }: Props) {
   )
 
   return (
-    <div className="space-y-6 p-5 bg-tg-secondary/50 backdrop-blur-xl rounded-3xl border border-white/5">
+    <div className="space-y-6 p-5 bg-[var(--tg-secondary)]/50 backdrop-blur-xl rounded-3xl border border-white/5">
       <div className="relative">
         <div className="absolute left-4 top-1/2 -translate-y-1/2">
           <img src="/icons/search.svg" alt="" className="w-5 h-5" />
@@ -66,12 +66,12 @@ export function ProductFilters({ onFilter }: Props) {
           placeholder="Поиск товаров..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setTimeout(apply, 300) }}
-          className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-violet-500/50 transition-colors"
+          className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-[var(--tg-input-bg)] backdrop-blur-sm border border-[var(--tg-input-border)] text-sm text-[var(--tg-input-text)] placeholder-[var(--tg-input-placeholder)] focus:outline-none focus:border-violet-500/50 transition-colors"
         />
       </div>
 
       <div>
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Платформа</div>
+        <div className="text-xs font-semibold text-[var(--tg-hint)] uppercase tracking-wider mb-3">Платформа</div>
         <div className="flex gap-2 flex-wrap">
           {platforms.map((p) => (
             <FilterButton
@@ -86,7 +86,7 @@ export function ProductFilters({ onFilter }: Props) {
       </div>
 
       <div>
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Тип</div>
+        <div className="text-xs font-semibold text-[var(--tg-hint)] uppercase tracking-wider mb-3">Тип</div>
         <div className="flex gap-2 flex-wrap">
           {types.map((t) => (
             <FilterButton

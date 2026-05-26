@@ -1,6 +1,57 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build
 node_modules/
 dist/
+build/
+*.tsbuildinfo
+.next/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+*.err
+*.out
+tmp/
+logs/
+db-backup/
+monitoring/
+
+# Test data with potential secrets
+*_test.json
+update_admin.sql
+
+# Raw brand assets (too large, use presentation/assets instead)
+CoinMint/
+
+# Go
+tma-backend/tma-server
+tma-backend/tma-server.exe
+tma-backend/server.exe
+tma-backend/genhash
+tma-backend/genhash.exe
+vendor/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Env files
 .env
 .env.local
-*.log
-uploads/
+.env.*.local

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react'
+import { ReactNode, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { showTelegramBackButton } from '../../utils/telegram'
 
@@ -15,21 +15,6 @@ export function Header({ title, children, onBack, showLogo }: Props) {
   useEffect(() => {
     showTelegramBackButton(!!onBack)
   }, [onBack])
-
-  const [dark, setDark] = useState(() => localStorage.getItem('tma-theme') !== 'light')
-
-  const toggleTheme = () => {
-    const next = !dark
-    setDark(next)
-    localStorage.setItem('tma-theme', next ? 'dark' : 'light')
-    document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light')
-  }
-
-  useEffect(() => {
-    const saved = localStorage.getItem('tma-theme')
-    if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
-    else if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light')
-  }, [])
 
   return (
     <div className="sticky top-0 z-10 bg-[var(--tg-bg)] border-b border-[var(--tg-border)] px-4 py-3 backdrop-blur-lg bg-opacity-80">
@@ -48,13 +33,6 @@ export function Header({ title, children, onBack, showLogo }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {children}
-          <button
-            onClick={toggleTheme}
-            className="w-9 h-9 rounded-full bg-[var(--tg-secondary)] flex items-center justify-center text-lg hover:scale-110 transition-transform"
-            title={dark ? 'Светлая тема' : 'Тёмная тема'}
-          >
-            {dark ? '☀️' : '🌙'}
-          </button>
         </div>
       </div>
     </div>

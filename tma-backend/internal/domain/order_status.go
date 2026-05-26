@@ -7,12 +7,14 @@ var validTransitions = map[OrderStatus][]OrderStatus{
 	OrderStatusPaid:                {OrderStatusKeyIssued, OrderStatusWaitingActivation, OrderStatusRefundRequested, OrderStatusCancelled},
 	OrderStatusWaitingActivation:   {OrderStatusAwaitingCredentials, OrderStatusRefundRequested, OrderStatusCancelled},
 	OrderStatusAwaitingCredentials: {OrderStatusCredentialsReceived, OrderStatusRefundRequested, OrderStatusCancelled},
-	OrderStatusCredentialsReceived: {OrderStatusAwaiting2FA, OrderStatusRefundRequested, OrderStatusCancelled},
-	OrderStatusAwaiting2FA:         {OrderStatusActivating, OrderStatusCredentialsReceived, OrderStatusRefundRequested, OrderStatusCancelled},
-	OrderStatusActivating:          {OrderStatusActivated, OrderStatusRefundRequested, OrderStatusCancelled},
-	OrderStatusActivated:           {OrderStatusCompleted},
-	OrderStatusKeyIssued:           {OrderStatusCompleted},
-	OrderStatusRefundRequested:     {OrderStatusRefunded},
+	OrderStatusCredentialsReceived: {OrderStatusAwaiting2FA, OrderStatusAwaitingCredentials, OrderStatusCredentialsInvalid, OrderStatusRefundRequested, OrderStatusCancelled},
+	OrderStatusCredentialsInvalid:  {OrderStatusAwaitingCredentials, OrderStatusCredentialsReceived, OrderStatusCancelled},
+	OrderStatusAwaiting2FA:         {OrderStatusActivating, OrderStatusInvalid2FA, OrderStatusCredentialsReceived, OrderStatusRefundRequested, OrderStatusCancelled},
+	OrderStatusInvalid2FA:          {OrderStatusAwaiting2FA, OrderStatusActivating, OrderStatusCancelled},
+	OrderStatusActivating:          {OrderStatusActivated, OrderStatusInvalid2FA, OrderStatusRefundRequested, OrderStatusCancelled},
+	OrderStatusActivated:           {OrderStatusCompleted, OrderStatusCancelled},
+	OrderStatusKeyIssued:           {OrderStatusCompleted, OrderStatusCancelled},
+	OrderStatusRefundRequested:     {OrderStatusRefunded, OrderStatusCancelled},
 }
 
 func IsValidTransition(from, to OrderStatus) bool {

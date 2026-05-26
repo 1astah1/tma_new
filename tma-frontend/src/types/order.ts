@@ -3,13 +3,16 @@ import { Product } from './product'
 export type OrderStatus =
   | 'NEW' | 'WAITING_PAYMENT' | 'PAYMENT_VERIFICATION' | 'PAID'
   | 'WAITING_ACTIVATION' | 'AWAITING_CREDENTIALS' | 'CREDENTIALS_RECEIVED'
-  | 'AWAITING_2FA' | 'ACTIVATING' | 'ACTIVATED' | 'KEY_ISSUED' | 'COMPLETED'
+  | 'CREDENTIALS_INVALID' | 'AWAITING_2FA' | 'INVALID_2FA'
+  | 'ACTIVATING' | 'ACTIVATED' | 'KEY_ISSUED' | 'COMPLETED'
   | 'CANCELLED' | 'REFUND_REQUESTED' | 'REFUNDED'
 
 export interface Order {
   id: string
   user_id: string
   product_id: string
+  variant_id: string | null
+  quantity: number
   delivery_method: 'key' | 'activation'
   status: OrderStatus
   payment_method: string | null
@@ -17,6 +20,7 @@ export interface Order {
   payment_receipt_url: string | null
   payment_verified_by: string | null
   key_id: string | null
+  key_value: string | null
   assigned_admin_id: string | null
   cancelled_reason: string | null
   created_at: string
@@ -45,6 +49,7 @@ export const statusLabels: Record<OrderStatus, string> = {
   AWAITING_CREDENTIALS: 'Требуются данные',
   CREDENTIALS_RECEIVED: 'Данные получены',
   AWAITING_2FA: 'Ожидает код',
+  INVALID_2FA: 'Код неверен',
   ACTIVATING: 'Активация...',
   ACTIVATED: 'Активирован',
   KEY_ISSUED: 'Ключ выдан',
@@ -52,6 +57,7 @@ export const statusLabels: Record<OrderStatus, string> = {
   CANCELLED: 'Отменён',
   REFUND_REQUESTED: 'Возврат запрошен',
   REFUNDED: 'Возвращён',
+  CREDENTIALS_INVALID: 'Данные неверны',
 }
 
 export const statusColors: Record<OrderStatus, string> = {
@@ -62,7 +68,9 @@ export const statusColors: Record<OrderStatus, string> = {
   WAITING_ACTIVATION: 'bg-purple-100 text-purple-800',
   AWAITING_CREDENTIALS: 'bg-blue-100 text-blue-800',
   CREDENTIALS_RECEIVED: 'bg-yellow-100 text-yellow-800',
+  CREDENTIALS_INVALID: 'bg-red-100 text-red-800',
   AWAITING_2FA: 'bg-red-100 text-red-800',
+  INVALID_2FA: 'bg-red-100 text-red-800',
   ACTIVATING: 'bg-orange-100 text-orange-800',
   ACTIVATED: 'bg-green-100 text-green-800',
   KEY_ISSUED: 'bg-green-100 text-green-800',

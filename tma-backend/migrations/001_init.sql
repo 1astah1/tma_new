@@ -172,7 +172,7 @@ INSERT INTO product_keys (product_id, key, status) VALUES
     ((SELECT id FROM products WHERE title = 'V-Bucks 5000'), 'AAAAA-AAAAA-AAAAA-AAAA', 'available');
 
 INSERT INTO admins (telegram_id, username, password_hash, roles, is_active) VALUES
-    (111111, 'superadmin', '$2a$10$dummyhashfordevonly1234567890abcdef', '{super_admin,game_manager,activation_admin,support,finance}', true);
+    (111111, 'superadmin', '$2a$10$AIPtg4L1K3llSYaUI3AEsuSC8lYYS3mTapVkiyOwRLKv3XSJFLOne', '{super_admin,game_manager,activation_admin,support,finance}', true);
 -- +goose StatementEnd
 
 -- +goose Down

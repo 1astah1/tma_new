@@ -1,0 +1,4 @@
+ALTER TABLE users DROP COLUMN IF EXISTS is_banned, DROP COLUMN IF EXISTS admin_notes;
+ALTER TABLE product_keys DROP CONSTRAINT IF EXISTS uq_product_key;
+ALTER TABLE product_keys DROP COLUMN IF EXISTS invalid_at;
+DROP TABLE IF EXISTS promo_code_usage CASCADE;

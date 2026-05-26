@@ -43,7 +43,7 @@ export function HomePage() {
         {isLoading ? (
           <div className="flex justify-center py-8"><Loader /></div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2.5">
             {data?.data?.map((p) => <ProductCard key={p.id} product={p} />)}
           </div>
         )}

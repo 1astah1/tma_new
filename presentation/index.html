@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>COIN MINT — TMA Shop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<style>
+/* ═══ RESET ═══ */
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0D0D0D}
+
+/* ═══ VARIABLES ═══ */
+:root{
+  --gold:#FFD700;
+  --gold-dim:rgba(255,215,0,0.08);
+  --gold-glow:0 0 50px rgba(255,215,0,0.12);
+  --card:rgba(255,255,255,0.025);
+  --card-border:1px solid rgba(255,215,0,0.06);
+  --text:#FFFFFF;
+  --muted:rgba(255,255,255,0.35);
+  --radius:14px;
+  --fd:'Playfair Display',serif;
+  --fs:'Inter',-apple-system,sans-serif;
+}
+
+/* ═══ REVEAL ROOT ═══ */
+.reveal{
+  position:fixed;inset:0;z-index:0;
+  font-family:var(--fs);color:var(--text);
+  background:#0D0D0D;overflow:hidden;
+  font-size:clamp(16px,2.2vh,24px);
+}
+.reveal .slides{
+  position:absolute;inset:0!important;
+  width:100%!important;height:100%!important;
+  top:0!important;left:0!important;
+}
+.reveal .slides>section{
+  position:absolute;inset:0!important;
+  width:100vw!important;height:100vh!important;
+  padding:0!important;
+  display:flex!important;
+  flex-direction:column;justify-content:center;
+}
+
+/* Slide-level entrance animation */
+.reveal .slides section.present .slide-wrap{
+  animation:slideIn 0.8s cubic-bezier(0.16,1,0.3,1) forwards;
+}
+.reveal .slides section.present .ts{animation:slideIn 0.9s cubic-bezier(0.16,1,0.3,1) forwards}
+.reveal .slides section.present .ls{animation:slideIn 0.9s cubic-bezier(0.16,1,0.3,1) forwards}
+@keyframes slideIn{
+  0%{opacity:0;transform:translateY(30px)}
+  100%{opacity:1;transform:translateY(0)}
+}
+
+/* Typography */
+.reveal h1,.reveal h2,.reveal h3{font-family:var(--fd);color:var(--gold);text-transform:none;letter-spacing:0}
+.reveal h1{font-size:clamp(2.2em,6vh,6em);font-weight:900;text-shadow:0 0 80px rgba(255,215,0,0.08)}
+.reveal h2{font-size:clamp(1.2em,3vh,3em);font-weight:700}
+.reveal .controls{color:var(--gold)}
+.reveal .progress{background:var(--gold-dim);height:2px}
+.reveal .progress span{background:var(--gold)}
+.reveal .slide-number{
+  font-size:10px;color:var(--muted);
+  background:rgba(0,0,0,0.4);padding:3px 12px;border-radius:20px;
+  bottom:10px;right:10px;
+}
+
+/* ═══ SLIDE WRAPPER ═══ */
+.slide-wrap{
+  width:100%;height:100%;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:clamp(2em,7vh,7em) clamp(2em,7vw,7em);
+  position:relative;
+  background:radial-gradient(ellipse at 50% 20%, #161616 0%, #0D0D0D 100%);
+}
+.slide-wrap::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(circle at 20% 80%, rgba(255,215,0,0.02) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255,215,0,0.01) 0%, transparent 50%);
+}
+
+/* ═══ TITLE BAR ═══ */
+.tbar{
+  font-family:var(--fd);
+  font-size:clamp(0.9em,2.4vh,2.6em);
+  font-weight:700;color:var(--gold);
+  padding-bottom:0.15em;margin-bottom:0.3em;
+  position:relative;display:inline-block;
+}
+.tbar::after{
+  content:'';position:absolute;bottom:0;left:0;
+  width:clamp(30px,3.5vh,60px);height:2px;
+  background:var(--gold);border-radius:2px;
+}
+
+/* ═══ TEXT CONTENT ═══ */
+.txt{
+  font-size:clamp(0.7em,1.8vh,1.8em);
+  line-height:1.6;color:var(--text);
+  max-width:90%;
+}
+.txt strong{color:var(--gold)}
+.txt-muted{
+  font-size:clamp(0.45em,1.2vh,1.2em);
+  color:var(--muted);
+}
+
+/* ═══ GLASS ═══ */
+.glass{
+  background:var(--card);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:var(--card-border);border-radius:var(--radius);
+  padding:clamp(0.5em,1.5vh,1.5em) clamp(0.7em,2vw,2em);
+  max-width:85%;
+}
+.glass p{font-size:clamp(0.5em,1.3vh,1.3em);color:var(--muted);line-height:1.5}
+
+/* ═══ BULLET LIST ═══ */
+.bl{list-style:none;text-align:left}
+.bl li{
+  padding:clamp(0.15em,0.4vh,0.45em) 0;
+  font-size:clamp(0.6em,1.5vh,1.6em);
+  color:var(--text);opacity:0.9;
+  display:flex;align-items:flex-start;gap:0.5em;
+}
+.bl li::before{
+  content:'';flex-shrink:0;
+  width:clamp(4px,0.45vh,6px);height:clamp(4px,0.45vh,6px);
+  background:var(--gold);border-radius:50%;
+  margin-top:0.5em;
+}
+
+/* ═══ TWO COLUMNS ═══ */
+.cols2{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:clamp(1em,4vw,4em);
+  align-items:center;width:100%;
+}
+
+/* ═══ TITLE SLIDE ═══ */
+.ts{
+  height:100%;width:100%;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  background:radial-gradient(ellipse at 50% 25%, #181818 0%, #0D0D0D 70%);
+  position:relative;overflow:hidden;
+}
+.ts::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(255,215,0,0.04) 0%, transparent 40%),
+    radial-gradient(circle at 85% 85%, rgba(255,215,0,0.03) 0%, transparent 40%);
+}
+.ts .zc{position:relative;z-index:2;text-align:center}
+.ts .lo{
+  margin-bottom:clamp(0.5em,3vh,3em);
+  animation:lo 1.5s cubic-bezier(0.16,1,0.3,1) both;
+}
+.ts .lo img{
+  max-height:clamp(10vh,25vh,30vh);width:auto;
+  filter:drop-shadow(0 0 60px rgba(255,215,0,0.06));
+}
+@keyframes lo{
+  0%{opacity:0;transform:scale(0.5) translateY(40px)}
+  100%{opacity:1;transform:scale(1) translateY(0)}
+}
+.ts h1{
+  animation:h1a 1.2s cubic-bezier(0.16,1,0.3,1) 0.3s both;
+}
+@keyframes h1a{
+  0%{opacity:0;transform:translateY(25px);letter-spacing:0.3em}
+  100%{opacity:1;transform:translateY(0);letter-spacing:0.05em}
+}
+.ts .gl{
+  width:clamp(40px,5vh,80px);height:2px;
+  background:var(--gold);border-radius:2px;
+  margin:0.6em auto 0;
+  animation:fi 0.7s ease 0.5s both;
+}
+@keyframes fi{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
+.ts .st{
+  font-size:clamp(0.6em,1.4vh,1.4em);
+  color:var(--muted);margin-top:0.8em;font-weight:300;
+  letter-spacing:0.05em;line-height:1.5;
+  animation:fi 0.9s ease 0.7s both;
+}
+.ts .hint{
+  position:absolute;bottom:clamp(1em,3.5vh,3.5em);z-index:2;
+  color:rgba(255,255,255,0.1);font-size:clamp(0.35em,0.7vh,0.7em);
+  letter-spacing:0.1em;
+  animation:pp 2.5s ease-in-out infinite;
+}
+@keyframes pp{0%,100%{opacity:0.1}50%{opacity:0.35}}
+
+/* ═══ PRODUCT GRID ═══ */
+.pg{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:clamp(0.3em,0.8vh,0.8em);width:100%;margin-bottom:0.5em;
+}
+.pg .it{
+  background:var(--card);border:var(--card-border);border-radius:10px;
+  padding:clamp(0.25em,0.6vh,0.6em);
+  display:flex;flex-direction:column;align-items:center;gap:0.25em;
+  transition:all 0.3s ease;
+}
+.pg .it img{width:100%;aspect-ratio:1;object-fit:contain;border-radius:5px}
+.pg .it span{font-size:clamp(0.3em,0.6vh,0.6em);color:var(--muted)}
+
+/* ═══ FLOW DIAGRAM ═══ */
+.fl{
+  display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:clamp(0.15em,0.5vh,0.5em);width:100%;
+}
+.fl-box{
+  background:var(--card);border:var(--card-border);border-radius:10px;
+  padding:clamp(0.2em,0.5vh,0.5em) clamp(0.3em,0.8vw,0.8em);
+  font-size:clamp(0.4em,1vh,1em);text-align:center;
+  line-height:1.3;transition:all 0.3s;
+}
+.fl-box .s{color:var(--gold);font-weight:600;font-size:1.1em}
+.fl-box .d{color:var(--muted);font-size:0.7em;margin-top:0.1em}
+.fl-arr{color:var(--gold);font-size:clamp(0.5em,1.2vh,1.2em);opacity:0.25}
+
+/* ═══ COMPARISON TABLE ═══ */
+.cw{overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}
+.ct{
+  width:100%;border-collapse:separate;border-spacing:0;
+  border-radius:var(--radius);overflow:hidden;
+  font-size:clamp(0.45em,1.1vh,1.2em);
+}
+.ct th{
+  background:rgba(255,255,255,0.02);color:var(--gold);
+  font-family:var(--fd);font-weight:700;
+  padding:clamp(0.25em,0.6vh,0.65em) clamp(0.4em,0.8vw,0.9em);text-align:center;
+  border-bottom:1px solid rgba(255,215,0,0.12);
+}
+.ct th:first-child{color:var(--muted)}
+.ct th:last-child{color:var(--gold)}
+.ct td{
+  padding:clamp(0.2em,0.5vh,0.5em) clamp(0.4em,0.8vw,0.9em);text-align:center;
+  border-bottom:1px solid rgba(255,255,255,0.015);
+  color:var(--text);opacity:0.85;
+}
+.ct td:first-child{color:var(--muted);text-align:left;font-weight:500}
+.ct td:last-child{color:var(--gold);font-weight:600}
+.ct tr:nth-child(even) td{background:rgba(255,255,255,0.006)}
+
+/* ═══ BIZ CARDS ═══ */
+.bg{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:clamp(0.25em,0.6vh,0.6em);width:100%;
+}
+.bc{
+  background:var(--card);border:var(--card-border);border-radius:var(--radius);
+  padding:clamp(0.4em,1vh,1em) clamp(0.5em,1.2vw,1.2em);
+  display:flex;align-items:flex-start;gap:0.6em;
+  transition:all 0.3s ease;
+}
+.bc .num{
+  width:clamp(20px,2.2vh,28px);height:clamp(20px,2.2vh,28px);
+  flex-shrink:0;background:var(--gold);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:clamp(0.4em,0.8vh,0.8em);font-weight:700;color:#0D0D0D;
+}
+.bc .bt{
+  font-family:var(--fd);
+  font-size:clamp(0.5em,1.2vh,1.3em);font-weight:700;color:var(--gold);
+}
+.bc .bd{
+  font-size:clamp(0.4em,0.9vh,1em);color:var(--muted);margin-top:0.1em;line-height:1.4;
+}
+
+/* ═══ ARCHITECTURE ═══ */
+.ag{
+  display:grid;grid-template-columns:1fr auto 2fr;
+  gap:clamp(0.2em,0.5vh,0.5em);align-items:center;width:100%;
+}
+.an{
+  background:var(--card);border:var(--card-border);border-radius:var(--radius);
+  padding:clamp(0.35em,0.8vh,0.8em) clamp(0.5em,1vw,1em);text-align:center;
+  transition:all 0.3s ease;
+}
+.an .nm{font-family:var(--fd);font-size:clamp(0.5em,1.2vh,1.3em);font-weight:700;color:var(--gold)}
+.an .tl{font-size:clamp(0.3em,0.7vh,0.75em);color:var(--muted);margin-top:0.1em}
+.aa{display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:clamp(0.6em,1.4vh,1.5em);opacity:0.2}
+.ad{
+  background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.02);
+  border-radius:var(--radius);
+  padding:clamp(0.35em,0.8vh,0.8em) clamp(0.5em,1vw,1em);
+  font-size:clamp(0.35em,0.8vh,0.9em);color:var(--muted);line-height:1.4;
+}
+.ad strong{color:var(--text)}
+
+/* ═══ LAST SLIDE ═══ */
+.ls{
+  height:100%;width:100%;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  background:radial-gradient(ellipse at 50% 25%, #181818 0%, #0D0D0D 70%);
+}
+
+/* ═══ RESPONSIVE ═══ */
+@media(max-width:768px){
+  .cols2{grid-template-columns:1fr;gap:1em}
+  .pg{grid-template-columns:repeat(3,1fr)}
+  .ag{grid-template-columns:1fr}
+  .aa{display:none}
+  .bg{grid-template-columns:1fr}
+  .slide-wrap{padding:clamp(1.5em,4vh,4em) clamp(1em,4vw,4em)}
+}
+@media(max-width:480px){
+  .pg{grid-template-columns:repeat(2,1fr)}
+  .ct{font-size:0.35em}
+}
+</style>
+</head>
+<body>
+
+<div class="reveal">
+<div class="slides">
+
+<!-- ═══ 1: TITLE ═══ -->
+<section data-transition="fade" data-background-color="#0D0D0D">
+<div class="ts">
+  <div class="zc">
+    <div class="lo"><img src="assets/logo.png" alt="COIN MINT"></div>
+    <h1>COIN MINT</h1>
+    <div class="gl"></div>
+    <div class="st">Платформа для продажи цифровых товаров<br>на базе Telegram Mini App</div>
+  </div>
+  <div class="hint">&#9655; Нажмите Пробел чтобы начать</div>
+</div>
+</section>
+
+<!-- ═══ 2: ЧТО ТАКОЕ TMA ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Что такое Telegram Mini App?</div>
+
+  <p class="txt" style="margin-top:0.2em;">
+    <strong>Telegram Mini App</strong> — это обычный сайт, который открывается прямо внутри Telegram.
+  </p>
+
+  <ul class="bl" style="max-width:90%;margin-top:0.3em;">
+    <li>Ничего не нужно скачивать — всё работает прямо в Telegram</li>
+    <li>Telegram сам вас узнаёт — не надо вводить логины и пароли</li>
+    <li>Работает на любом телефоне, планшете или компьютере</li>
+    <li>Выглядит как обычный сайт: кнопки, картинки, понятный интерфейс</li>
+    <li>Ваши данные защищены — всё шифруется и хранится безопасно</li>
+  </ul>
+
+  <div class="glass" style="margin-top:0.5em;">
+    <p>«Открыл Telegram → зашёл в магазин → выбрал → оплатил. Всё внутри одного приложения.»</p>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 3: НАША TMA ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Наша TMA — COIN MINT Shop</div>
+
+  <p class="txt" style="margin-top:0.2em;">
+    Мы сделали полноценный <strong>магазин внутри Telegram</strong> для продажи цифровых товаров.
+  </p>
+
+  <ul class="bl" style="max-width:90%;margin-top:0.3em;">
+    <li>Ключи для игр, аккаунты, подписки — всё в одном месте</li>
+    <li>Посмотрел товар → оплатил → получил — никаких команд, только экран и кнопки</li>
+    <li>Корзина на несколько товаров и скидки по промокодам</li>
+    <li>Чат с поддержкой прямо внутри каждого заказа</li>
+    <li>Можно заплатить картой, СБП или криптовалютой</li>
+    <li>Автоматическая выдача — админ нажал кнопку и ключ улетел в чат</li>
+  </ul>
+
+  <div class="glass" style="margin-top:0.5em;">
+    <p><strong style="color:var(--gold)">Главное:</strong> всё в одном окне — каталог, корзина, оплата, чат, статус. Покупатель не выходит из Telegram.</p>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 4: СРАВНЕНИЕ ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Сравнение: TMA Shop vs @shopcoinmint</div>
+
+  <p class="txt-muted" style="margin-bottom:0.3em;">
+    Один и тот же сервис — но насколько удобнее стал работать с появлением TMA
+  </p>
+
+  <div class="cw">
+    <table class="ct">
+      <thead><tr><th>Критерий</th><th>@shopcoinmint (бот)</th><th>TMA Shop</th></tr></thead>
+      <tbody>
+        <tr><td>Интерфейс</td><td>Текстовые кнопки</td><td>Нативный сайт с картинками</td></tr>
+        <tr><td>Корзина</td><td>Нет — только по одному</td><td>Несколько товаров сразу</td></tr>
+        <tr><td>Каталог</td><td>Список текстом</td><td>Сетка с картинками и фильтрами</td></tr>
+        <tr><td>Оплата</td><td>Только карта</td><td>СБП / Карта / Криптовалюта</td></tr>
+        <tr><td>Чат поддержки</td><td>Нет</td><td>Встроенный чат внутри заказа</td></tr>
+        <tr><td>Статус заказа</td><td>Приходит сообщением</td><td>Экран с прогрессом и шагами</td></tr>
+        <tr><td>Личный кабинет</td><td>Нет</td><td>История всех заказов</td></tr>
+        <tr><td>Панель админа</td><td>Команды в чат</td><td>Графический интерфейс</td></tr>
+        <tr><td>Выдача ключей</td><td>Вручную</td><td>Автоматически, одним кликом</td></tr>
+        <tr><td>Шифрование</td><td>Нет</td><td>AES-256 — данные защищены</td></tr>
+        <tr><td>Промокоды</td><td>Нет</td><td>Гибкая система скидок</td></tr>
+        <tr><td>Надёжность</td><td>Низкая</td><td>Go + PostgreSQL</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 5: КАТАЛОГ ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Каталог и товары</div>
+
+  <p class="txt-muted" style="margin-bottom:0.25em;">
+    Товары разложены по полкам — как в обычном интернет-магазине
+  </p>
+
+  <div class="pg">
+    <div class="it"><img src="assets/products/bc.png" alt="BC"><span>Battlefield</span></div>
+    <div class="it"><img src="assets/products/cp.png" alt="CP"><span>Cyberpunk</span></div>
+    <div class="it"><img src="assets/products/nabori.png" alt=""><span>Наборы</span></div>
+    <div class="it"><img src="assets/products/novosti.png" alt=""><span>Новости</span></div>
+    <div class="it"><img src="assets/products/otzivi.png" alt=""><span>Отзывы</span></div>
+    <div class="it"><img src="assets/products/chat.png" alt=""><span>Чат</span></div>
+  </div>
+
+  <ul class="bl">
+    <li>Фильтры по платформе (PS, Xbox, ПК) и по типу (игры, подписки)</li>
+    <li>У каждого товара — описание, цена, картинка, варианты доставки</li>
+    <li>Можно получить как ключ (просто код) или активацию (логин + пароль)</li>
+    <li>Промокоды на скидку — вводите код и цена снижается</li>
+  </ul>
+</div>
+</section>
+
+<!-- ═══ 6: ОПЛАТА ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Оплата заказа</div>
+
+  <p class="txt-muted" style="margin-bottom:0.2em;">
+    Купили сразу несколько товаров? Корзина всё собирает в один заказ
+  </p>
+
+  <ul class="bl" style="max-width:90%;">
+    <li>В корзину можно добавить несколько товаров и оплатить всё сразу</li>
+    <li>Выбираете удобный способ: СБП, банковская карта, криптовалюта</li>
+    <li>После оплаты загружаете чек — админ проверит и подтвердит</li>
+    <li>Есть правила покупки — можно ознакомиться перед заказом</li>
+    <li>Всё внутри Telegram — не нужно переходить на другие сайты</li>
+  </ul>
+
+  <div class="glass" style="margin-top:0.4em;">
+    <p><strong style="color:var(--gold)">Как работает:</strong> загрузили чек → админ проверил → статус поменялся → вы получили товар. Всё видно на экране.</p>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 7: ПОЛУЧЕНИЕ ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Как получить товар</div>
+
+  <p class="txt-muted" style="margin-bottom:0.2em;">
+    После оплаты заказ сам проходит по шагам. Вы просто смотрите и получаете
+  </p>
+
+  <div class="cols2" style="margin-top:0.1em;">
+    <div>
+      <p style="font-family:var(--fd);font-size:clamp(0.55em,1.4vh,1.5em);color:var(--gold);margin-bottom:0.15em;font-weight:700;">Если купили <strong>ключ</strong>:</p>
+      <ul class="bl">
+        <li>Админ проверяет оплату</li>
+        <li>Назначает ключ из списка доступных</li>
+        <li>Ключ приходит в чат — можно скопировать</li>
+      </ul>
+    </div>
+    <div>
+      <p style="font-family:var(--fd);font-size:clamp(0.55em,1.4vh,1.5em);color:var(--gold);margin-bottom:0.15em;font-weight:700;">Если купили <strong>аккаунт</strong>:</p>
+      <ul class="bl">
+        <li>Вводите свой логин и пароль</li>
+        <li>Админ привязывает аккаунт к вам</li>
+        <li>Если нужно — вводите код 2FA</li>
+        <li>Получаете готовый аккаунт</li>
+      </ul>
+    </div>
+  </div>
+
+  <ul class="bl" style="font-size:clamp(0.4em,1vh,1.1em);margin-top:0.15em;">
+    <li>На каждом шаге видно сколько осталось — прогресс на экране</li>
+    <li>Можно написать в чат поддержки если что-то пошло не так</li>
+    <li>Все заказы сохраняются — можно вернуться и посмотреть историю</li>
+  </ul>
+</div>
+</section>
+
+<!-- ═══ 8: АДМИН ДАШБОРД ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Панель администратора — Дашборд</div>
+
+  <p class="txt-muted" style="margin-bottom:0.2em;">
+    Главный экран админа. Как пульт управления магазином — вся картина сразу
+  </p>
+
+  <div class="bg">
+    <div class="bc"><div class="num">1</div><div><div class="bt">Статистика заказов</div><div class="bd">Сколько всего, сколько в работе, сколько выполнено</div></div></div>
+    <div class="bc"><div class="num">2</div><div><div class="bt">Выручка</div><div class="bd">За сегодня, неделю, месяц — график и сумма</div></div></div>
+    <div class="bc"><div class="num">3</div><div><div class="bt">Графики</div><div class="bd">Как идут дела — динамика по дням и неделям</div></div></div>
+    <div class="bc"><div class="num">4</div><div><div class="bt">Последние заказы</div><div class="bd">Самые свежие заказы сразу видны на главной</div></div></div>
+  </div>
+
+  <div class="glass" style="margin-top:0.35em;">
+    <p>Больше никаких команд в чате. Открыл дашборд — и сразу видно как работает магазин.</p>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 9: ЦИКЛ ЗАКАЗА ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Как админ работает с заказом</div>
+
+  <p class="txt-muted" style="margin-bottom:0.15em;">
+    Весь путь заказа: от поступления до выдачи товара покупателю
+  </p>
+
+  <div class="fl">
+    <div class="fl-box"><div class="s">НОВЫЙ</div><div class="d">Заказ создан</div></div>
+    <div class="fl-arr">&#10132;</div>
+    <div class="fl-box"><div class="s">ЖДЁТ ОПЛАТЫ</div><div class="d">Клиент загрузил чек</div></div>
+    <div class="fl-arr">&#10132;</div>
+    <div class="fl-box"><div class="s">ПРОВЕРКА</div><div class="d">Админ смотрит чек</div></div>
+    <div class="fl-arr">&#10132;</div>
+    <div class="fl-box"><div class="s">ОПЛАЧЕН</div><div class="d">Чек верный</div></div>
+  </div>
+
+  <div class="cols2" style="margin-top:0.2em;">
+    <div>
+      <p style="font-size:clamp(0.4em,1.1vh,1.2em);color:var(--gold);font-weight:600;margin-bottom:0.1em;">Заказ на <strong>ключ</strong>:</p>
+      <div class="fl" style="flex-wrap:nowrap;">
+        <div class="fl-box" style="font-size:clamp(0.3em,0.7vh,0.75em);"><div class="s">ВЫДАЧА</div><div class="d">Выбрал ключ из списка</div></div>
+        <div class="fl-arr">&#10132;</div>
+        <div class="fl-box" style="font-size:clamp(0.3em,0.7vh,0.75em);"><div class="s">ГОТОВО</div><div class="d">Ключ отправлен в чат</div></div>
+      </div>
+    </div>
+    <div>
+      <p style="font-size:clamp(0.4em,1.1vh,1.2em);color:var(--gold);font-weight:600;margin-bottom:0.1em;">Заказ на <strong>активацию</strong>:</p>
+      <div class="fl" style="flex-wrap:nowrap;">
+        <div class="fl-box" style="font-size:clamp(0.3em,0.7vh,0.75em);"><div class="s">ДАННЫЕ</div><div class="d">Клиент ввёл логин</div></div>
+        <div class="fl-arr">&#10132;</div>
+        <div class="fl-box" style="font-size:clamp(0.3em,0.7vh,0.75em);"><div class="s">АКТИВАЦИЯ</div><div class="d">Админ подтвердил</div></div>
+        <div class="fl-arr">&#10132;</div>
+        <div class="fl-box" style="font-size:clamp(0.3em,0.7vh,0.75em);"><div class="s">ГОТОВО</div><div class="d">Аккаунт получен</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="txt-muted" style="font-size:clamp(0.3em,0.7vh,0.75em);text-align:center;margin-top:0.1em;">
+    Если данные неверные — админ запрашивает новые &#8226; Если 2FA не подошёл — запрашивает другой код &#8226; Если проблема серьёзная — возврат
+  </p>
+
+  <div class="glass" style="margin-top:0.15em;">
+    <p><strong style="color:var(--gold)">Как это выглядит для админа:</strong> открыл список заказов → выбрал нужный → увидел чек → нажал «Подтвердить оплату» → выбрал ключ → написал в чат. Всё на одной странице.</p>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 10: ТОВАРЫ, КЛЮЧИ, ЮЗЕРЫ ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Управление товарами, ключами и пользователями</div>
+
+  <div class="bg">
+    <div class="bc"><div class="num">1</div><div><div class="bt">Товары</div><div class="bd">Добавлять новые, менять цены, загружать картинки. У каждого товара можно настроить способы доставки.</div></div></div>
+    <div class="bc"><div class="num">2</div><div><div class="bt">Ключи</div><div class="bd">Добавлять пачками (импорт из файла), следить какие проданы, какие свободны. При отмене заказа ключ освобождается.</div></div></div>
+    <div class="bc"><div class="num">3</div><div><div class="bt">Пользователи</div><div class="bd">Кто что покупал, история заказов, можно заблокировать, оставить заметку.</div></div></div>
+    <div class="bc"><div class="num">4</div><div><div class="bt">Роли и аудит</div><div class="bd">У каждого админа своя роль: кто-то только смотрит, кто-то выдаёт ключи. Все действия записываются.</div></div></div>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 11: АРХИТЕКТУРА ═══ -->
+<section data-transition="slide">
+<div class="slide-wrap">
+  <div class="tbar">Как это устроено и безопасность</div>
+
+  <div class="bg" style="margin-bottom:0.2em;">
+    <div class="bc"><div class="num">&#128274;</div><div><div class="bt">Шифрование AES-256</div><div class="bd">Все данные покупателей зашифрованы. Даже если базу украдут — данные не прочитают.</div></div></div>
+    <div class="bc"><div class="num">&#128737;</div><div><div class="bt">JWT-защита</div><div class="bd">Каждый запрос проверяется. Нельзя зайти в админку без токена.</div></div></div>
+    <div class="bc"><div class="num">&#128640;</div><div><div class="bt">Go + PostgreSQL</div><div class="bd">Бэкенд на Go — быстрый и надёжный. База данных выдерживает тысячи заказов.</div></div></div>
+    <div class="bc"><div class="num">&#128373;</div><div><div class="bt">Защита от ботов</div><div class="bd">Rate limiting — если кто-то стучится слишком часто, доступ блокируется.</div></div></div>
+  </div>
+
+  <div class="ag">
+    <div class="an"><div class="nm">TMA</div><div class="tl">То что видит покупатель</div></div>
+    <div class="aa">&#10132;</div>
+    <div class="ad"><strong>Сайт внутри Telegram.</strong> Каталог, корзина, чат, статус заказа.</div>
+
+    <div class="an"><div class="nm">Admin Panel</div><div class="tl">То что видит админ</div></div>
+    <div class="aa">&#10132;</div>
+    <div class="ad"><strong>Панель управления.</strong> Заказы, товары, ключи, статистика.</div>
+
+    <div class="an"><div class="nm">Backend</div><div class="tl">Сервер на Go</div></div>
+    <div class="aa">&#10132;</div>
+    <div class="ad"><strong>Обрабатывает всё:</strong> заказы, шифрование, авторизацию, чат.</div>
+
+    <div class="an"><div class="nm">Database</div><div class="tl">PostgreSQL</div></div>
+    <div class="aa">&#10132;</div>
+    <div class="ad"><strong>Хранит все данные:</strong> заказы, товары, ключи, пользователей.</div>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 12: СПАСИБО ═══ -->
+<section data-transition="fade" data-background-color="#0D0D0D">
+<div class="ls">
+  <div style="text-align:center;">
+    <div style="font-size:clamp(2.5em,6vh,6em);font-family:var(--fd);font-weight:900;color:var(--gold);text-shadow:0 0 80px rgba(255,215,0,0.08);animation:h1a 1.2s cubic-bezier(0.16,1,0.3,1) 0.2s both;">
+      Спасибо за просмотр
+    </div>
+    <div style="width:clamp(40px,5vh,80px);height:2px;background:var(--gold);border-radius:2px;margin:0.6em auto 0;animation:fi 0.7s ease 0.5s both;"></div>
+    <div style="font-size:clamp(0.6em,1.4vh,1.4em);color:var(--muted);margin-top:0.8em;font-weight:300;animation:fi 0.9s ease 0.7s both;">
+      COIN MINT — Telegram Mini App Shop
+    </div>
+  </div>
+</div>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+var rw = window.innerWidth;
+var rh = window.innerHeight;
+Reveal.initialize({
+  controls: true,
+  controlsLayout: 'bottom-right',
+  controlsBackArrows: 'visible',
+  progress: true,
+  center: false,
+  hash: true,
+  slideNumber: true,
+  transition: 'slide',
+  transitionSpeed: 'default',
+  backgroundTransition: 'fade',
+  mouseWheel: true,
+  touch: true,
+  loop: false,
+  width: rw,
+  height: rh,
+  margin: 0,
+  minScale: 1,
+  maxScale: 1,
+  hideInactiveCursor: true,
+  hideCursorTime: 3000,
+  plugins: []
+});
+
+function fillScreen() {
+  var r = document.querySelector('.reveal');
+  if (r) r.style.cssText = 'position:fixed;inset:0;z-index:0;background:#0D0D0D';
+  var s = document.querySelector('.reveal .slides');
+  if (s) s.style.cssText = 'position:absolute;inset:0!important;width:100%!important;height:100%!important;transform:none!important';
+}
+Reveal.addEventListener('ready', fillScreen);
+window.addEventListener('resize', fillScreen);
+fillScreen();
+
+// PDF button
+setTimeout(function(){
+  var b=document.createElement('div');
+  b.innerHTML='&#128196; PDF';
+  b.style.cssText='position:fixed;bottom:12px;left:12px;z-index:999;font-size:11px;color:rgba(255,255,255,0.2);background:rgba(0,0,0,0.35);padding:4px 12px;border-radius:20px;cursor:pointer;transition:all 0.2s;font-family:Inter,sans-serif;letter-spacing:0.05em;border:1px solid rgba(255,255,255,0.03)';
+  b.onmouseover=function(){this.style.color='rgba(255,255,255,0.5)';this.style.borderColor='rgba(255,215,0,0.15)'};
+  b.onmouseout=function(){this.style.color='rgba(255,255,255,0.2)';this.style.borderColor='rgba(255,255,255,0.03)'};
+  b.onclick=function(){window.open(window.location.href.split('?')[0]+'?print-pdf','_blank')};
+  document.body.appendChild(b);
+},1000);
+</script>
+</body>
+</html>

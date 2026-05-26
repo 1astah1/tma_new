@@ -25,6 +25,8 @@ type ProductFilter struct {
 	MinPrice *float64 `json:"min_price,omitempty"`
 	MaxPrice *float64 `json:"max_price,omitempty"`
 	Status   *string  `json:"status,omitempty"`
+	Sort     string   `json:"sort"`
+	Order    string   `json:"order"`
 	Page     int      `json:"page"`
 	Limit    int      `json:"limit"`
 }
@@ -84,7 +86,20 @@ func (r *ProductRepo) List(ctx context.Context, f ProductFilter) ([]domain.Produ
 	}
 	offset := (f.Page - 1) * f.Limit
 
-	query := "SELECT * FROM products" + whereClause + " ORDER BY created_at DESC"
+	// Sorting
+	sortField := "created_at"
+	sortOrder := "DESC"
+	allowedSort := map[string]string{
+		"price": "price", "title": "title", "created_at": "created_at",
+	}
+	if v, ok := allowedSort[f.Sort]; ok {
+		sortField = v
+	}
+	if f.Order == "asc" {
+		sortOrder = "ASC"
+	}
+
+	query := "SELECT * FROM products" + whereClause + fmt.Sprintf(" ORDER BY %s %s", sortField, sortOrder)
 	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
 	args = append(args, f.Limit, offset)
 
@@ -109,16 +124,16 @@ func (r *ProductRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Produc
 
 func (r *ProductRepo) Create(ctx context.Context, p *domain.Product) error {
 	err := r.db.GetContext(ctx, p,
-		`INSERT INTO products (title, description, platform, type, price, image_url, delivery_methods, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		 RETURNING *`, p.Title, p.Description, p.Platform, p.Type, p.Price, p.ImageURL, p.DeliveryMethods, p.Status)
+		`INSERT INTO products (title, description, platform, type, price, discount_percent, variants, image_url, delivery_methods, status)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 RETURNING *`, p.Title, p.Description, p.Platform, p.Type, p.Price, p.DiscountPercent, p.Variants, p.ImageURL, p.DeliveryMethods, p.Status)
 	return err
 }
 
 func (r *ProductRepo) Update(ctx context.Context, p *domain.Product) error {
 	_, err := r.db.NamedExecContext(ctx,
 		`UPDATE products SET title=:title, description=:description, platform=:platform, 
-		 type=:type, price=:price, image_url=:image_url, 
+		 type=:type, price=:price, discount_percent=:discount_percent, variants=:variants, image_url=:image_url, 
 		 delivery_methods=:delivery_methods, status=:status, updated_at=NOW()
 		 WHERE id=:id`, p)
 	return err
@@ -127,4 +142,18 @@ func (r *ProductRepo) Update(ctx context.Context, p *domain.Product) error {
 func (r *ProductRepo) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, "UPDATE products SET status='inactive' WHERE id=$1", id)
 	return err
+}
+
+func (r *ProductRepo) CountAvailableKeys(ctx context.Context, productID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count,
+		"SELECT COUNT(*) FROM product_keys WHERE product_id = $1 AND status = 'available'", productID)
+	return count, err
+}
+
+func (r *ProductRepo) CountOrders(ctx context.Context, productID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count,
+		"SELECT COUNT(*) FROM orders WHERE product_id = $1", productID)
+	return count, err
 }

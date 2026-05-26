@@ -98,3 +98,25 @@ func (r *UserRepo) List(ctx context.Context, search string, page, limit int) ([]
 	}
 	return users, total, nil
 }
+
+func (r *UserRepo) UpdateBan(ctx context.Context, id uuid.UUID, isBanned bool) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET is_banned = $1 WHERE id = $2", isBanned, id)
+	return err
+}
+
+func (r *UserRepo) UpdateAdminNotes(ctx context.Context, id uuid.UUID, notes string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET admin_notes = $1 WHERE id = $2", notes, id)
+	return err
+}
+
+func (r *UserRepo) CountOrders(ctx context.Context, userID uuid.UUID) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM orders WHERE user_id = $1", userID)
+	return count, err
+}
+
+func (r *UserRepo) CountOrdersByStatus(ctx context.Context, userID uuid.UUID, status string) (int, error) {
+	var count int
+	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM orders WHERE user_id = $1 AND status = $2", userID, status)
+	return count, err
+}

@@ -10,7 +10,6 @@ import (
 type Config struct {
 	Server    ServerConfig
 	Database  DatabaseConfig
-	Redis     RedisConfig
 	JWT       JWTConfig
 	Telegram  TelegramConfig
 	App       AppConfig
@@ -23,10 +22,6 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL string
-}
-
-type RedisConfig struct {
 	URL string
 }
 
@@ -55,6 +50,16 @@ func getExecDir() string {
 }
 
 func Load() *Config {
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		panic("JWT_SECRET environment variable is required")
+	}
+
+	encryptKey := os.Getenv("ACCOUNT_ENCRYPTION_KEY")
+	if encryptKey == "" {
+		panic("ACCOUNT_ENCRYPTION_KEY environment variable is required")
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Port: getEnv("SERVER_PORT", "8080"),
@@ -63,18 +68,15 @@ func Load() *Config {
 		Database: DatabaseConfig{
 			URL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/tma_shop?sslmode=disable"),
 		},
-		Redis: RedisConfig{
-			URL: getEnv("REDIS_URL", "redis://localhost:6379"),
-		},
 		JWT: JWTConfig{
-			Secret:     getEnv("JWT_SECRET", "super-secret-key-min-32-chars-long!!"),
+			Secret:     jwtSecret,
 			AccessTTL:  getDuration("JWT_ACCESS_TTL", 24*time.Hour),
 			RefreshTTL: getDuration("JWT_REFRESH_TTL", 168*time.Hour),
 		},
 		Telegram: TelegramConfig{
 			BotToken:   getEnv("BOT_TOKEN", ""),
 			WebhookURL: getEnv("BOT_WEBHOOK_URL", ""),
-			EncryptKey: getEnv("ACCOUNT_ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef"),
+			EncryptKey: encryptKey,
 		},
 		UploadDir: filepath.Join(getExecDir(), "uploads"),
 		App: AppConfig{

@@ -3,18 +3,6 @@
 @tailwind utilities;
 
 :root {
-  --tg-bg: var(--tg-theme-bg-color, #f8f9fc);
-  --tg-text: var(--tg-theme-text-color, #1a1a2e);
-  --tg-button: var(--tg-theme-button-color, #6c63ff);
-  --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --tg-hint: var(--tg-theme-hint-color, #8e8ea0);
-  --tg-secondary: var(--tg-theme-secondary-bg-color, #eef0f6);
-  --tg-border: #e2e5f0;
-  --tg-card: #ffffff;
-  --tg-glass: rgba(255,255,255,0.7);
-}
-
-[data-theme="dark"] {
   --tg-bg: #0f0f23;
   --tg-text: #e4e4f0;
   --tg-button: #7c73ff;
@@ -24,6 +12,22 @@
   --tg-border: #2a2a45;
   --tg-card: #16163a;
   --tg-glass: rgba(22,22,58,0.85);
+  --tg-alert-info-bg: rgba(59,130,246,0.15);
+  --tg-alert-info-border: rgba(59,130,246,0.3);
+  --tg-alert-info-text: #93c5fd;
+  --tg-alert-success-bg: rgba(34,197,94,0.15);
+  --tg-alert-success-border: rgba(34,197,94,0.3);
+  --tg-alert-success-text: #86efac;
+  --tg-alert-warning-bg: rgba(234,179,8,0.15);
+  --tg-alert-warning-border: rgba(234,179,8,0.3);
+  --tg-alert-warning-text: #fde047;
+  --tg-alert-error-bg: rgba(239,68,68,0.15);
+  --tg-alert-error-border: rgba(239,68,68,0.3);
+  --tg-alert-error-text: #fca5a5;
+  --tg-input-bg: rgba(255,255,255,0.05);
+  --tg-input-border: rgba(255,255,255,0.1);
+  --tg-input-text: #e4e4f0;
+  --tg-input-placeholder: #6b6b80;
 }
 
 body {
@@ -33,11 +37,6 @@ body {
   -webkit-font-smoothing: antialiased;
   background-color: var(--tg-bg);
   color: var(--tg-text);
-  transition: background-color 0.3s, color 0.3s;
-}
-
-* {
-  transition: background-color 0.25s, border-color 0.25s, color 0.2s;
 }
 
 input:focus {

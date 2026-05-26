@@ -7,17 +7,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"tma-backend/internal/domain"
+	"tma-backend/internal/handler"
 	"tma-backend/internal/repository"
 	"tma-backend/internal/service"
-	"tma-backend/internal/handler"
 )
 
 type ProductHandler struct {
-	svc *service.ProductService
+	svc       *service.ProductService
+	productRepo *repository.ProductRepo
 }
 
-func NewProductHandler(svc *service.ProductService) *ProductHandler {
-	return &ProductHandler{svc: svc}
+func NewProductHandler(svc *service.ProductService, productRepo *repository.ProductRepo) *ProductHandler {
+	return &ProductHandler{svc: svc, productRepo: productRepo}
 }
 
 func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +58,12 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 			f.Limit = l
 		}
 	}
+	if v := q.Get("sort"); v != "" {
+		f.Sort = v
+	}
+	if v := q.Get("order"); v != "" {
+		f.Order = v
+	}
 
 	// Only active products for public
 	active := "active"
@@ -67,8 +75,26 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	type ProductWithKeys struct {
+		domain.Product
+		AvailableKeys int `json:"available_keys"`
+	}
+
+	result := make([]ProductWithKeys, 0, len(products))
+	for _, p := range products {
+		pwk := ProductWithKeys{Product: p}
+		for _, dm := range p.DeliveryMethods {
+			if dm == "key" {
+				cnt, _ := h.productRepo.CountAvailableKeys(r.Context(), p.ID)
+				pwk.AvailableKeys = cnt
+				break
+			}
+		}
+		result = append(result, pwk)
+	}
+
 	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"data": products,
+		"data": result,
 		"meta": map[string]interface{}{
 			"page":  f.Page,
 			"limit": f.Limit,
@@ -90,7 +116,23 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler.RespondJSON(w, http.StatusOK, product)
+	type ProductWithKeys struct {
+		domain.Product
+		AvailableKeys int `json:"available_keys"`
+		OrderCount    int `json:"order_count"`
+	}
+
+	pwk := ProductWithKeys{Product: *product}
+	for _, dm := range product.DeliveryMethods {
+		if dm == "key" {
+			cnt, _ := h.productRepo.CountAvailableKeys(r.Context(), id)
+			pwk.AvailableKeys = cnt
+			break
+		}
+	}
+	pwk.OrderCount, _ = h.productRepo.CountOrders(r.Context(), id)
+
+	handler.RespondJSON(w, http.StatusOK, pwk)
 }
 
 func (h *ProductHandler) GetPlatforms(w http.ResponseWriter, r *http.Request) {

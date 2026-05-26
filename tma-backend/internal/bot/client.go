@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -148,7 +148,7 @@ func (b *Bot) sendMessage(chatID int64, text string) {
 
 func (b *Bot) sendMessageWithButtons(chatID int64, text string, buttons [][]map[string]interface{}) {
 	if b.token == "" {
-		log.Printf("[BOT] Chat %d: %s\n", chatID, text)
+		slog.Info("bot message (dev mode)", slog.Int64("chat_id", chatID), slog.String("text", text))
 		return
 	}
 
@@ -169,7 +169,7 @@ func (b *Bot) sendMessageWithButtons(chatID int64, text string, buttons [][]map[
 
 	resp, err := b.httpClient.Post(url, "application/json", strings.NewReader(string(data)))
 	if err != nil {
-		log.Printf("Failed to send message: %v", err)
+		slog.Error("Failed to send bot message", slog.String("error", err.Error()))
 		return
 	}
 	defer resp.Body.Close()
