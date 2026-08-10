@@ -8,10 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"tma-backend/internal/handler"
+	"tma-backend/internal/repository"
 	"tma-backend/internal/service"
 )
 
-func UserAuth(authSvc *service.AuthService, env string) func(http.Handler) http.Handler {
+func UserAuth(authSvc *service.AuthService, userRepo *repository.UserRepo, env string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractToken(r)
@@ -44,6 +45,16 @@ func UserAuth(authSvc *service.AuthService, env string) func(http.Handler) http.
 			userID, err := uuid.Parse(claims.UserID)
 			if err != nil {
 				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Invalid token claims")
+				return
+			}
+
+			user, err := userRepo.GetByID(r.Context(), userID)
+			if err != nil {
+				handler.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "User not found")
+				return
+			}
+			if user.IsBanned {
+				handler.RespondError(w, http.StatusForbidden, "FORBIDDEN", "Account is banned")
 				return
 			}
 
@@ -89,7 +100,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 			hasRole := false
 			for _, required := range roles {
 				for _, userRole := range userRoles {
-					if userRole == required {
+					if userRole == required || userRole == "super_admin" {
 						hasRole = true
 						break
 					}

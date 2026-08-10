@@ -5,9 +5,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,8 +31,8 @@ func NewAuthService(cfg *config.Config, userRepo UserStore, adminRepo AdminStore
 }
 
 type UserClaims struct {
-	UserID    string `json:"user_id"`
-	TelegramID int64 `json:"telegram_id"`
+	UserID     string `json:"user_id"`
+	TelegramID int64  `json:"telegram_id"`
 	jwt.RegisteredClaims
 }
 
@@ -41,12 +44,19 @@ type AdminClaims struct {
 }
 
 func (s *AuthService) VerifyTelegramInitData(initData string) (bool, error) {
+	if s.cfg.Telegram.BotToken == "" {
+		return false, domain.ErrUnauthorized
+	}
+
 	parsed, err := url.ParseQuery(initData)
 	if err != nil {
 		return false, err
 	}
 
 	hash := parsed.Get("hash")
+	if hash == "" {
+		return false, domain.ErrUnauthorized
+	}
 	parsed.Del("hash")
 
 	keys := make([]string, 0, len(parsed))
@@ -69,15 +79,71 @@ func (s *AuthService) VerifyTelegramInitData(initData string) (bool, error) {
 	h.Write([]byte(dataCheck))
 	expectedHash := hex.EncodeToString(h.Sum(nil))
 
-	return hmac.Equal([]byte(hash), []byte(expectedHash)), nil
+	if !hmac.Equal([]byte(hash), []byte(expectedHash)) {
+		return false, domain.ErrUnauthorized
+	}
+
+	if authDate := parsed.Get("auth_date"); authDate != "" {
+		ts, err := strconv.ParseInt(authDate, 10, 64)
+		if err == nil && time.Since(time.Unix(ts, 0)) > 24*time.Hour {
+			return false, domain.ErrUnauthorized
+		}
+	}
+
+	return true, nil
 }
 
-func (s *AuthService) AuthenticateUser(ctx context.Context, initData string) (*domain.User, error) {
+func (s *AuthService) AuthenticateUser(ctx context.Context, initData string, devBypass bool) (*domain.User, error) {
+	if devBypass && (initData == "" || initData == "test") {
+		tgID := int64(123456789)
+		username := "test_user"
+		firstName := "Test"
+		user, err := s.userRepo.Upsert(ctx, tgID, &username, &firstName)
+		if err != nil {
+			return nil, err
+		}
+		if user.IsBanned {
+			return nil, domain.ErrForbidden
+		}
+		return user, nil
+	}
+
+	if initData == "" {
+		return nil, domain.ErrUnauthorized
+	}
+
+	valid, err := s.VerifyTelegramInitData(initData)
+	if err != nil || !valid {
+		if devBypass {
+			tgID, username, firstName := extractTelegramData(initData)
+			if tgID != 0 {
+				slog.Warn("dev auth: accepting Telegram initData without hash verification",
+					slog.Int64("telegram_id", tgID),
+				)
+				user, upsertErr := s.userRepo.Upsert(ctx, tgID, username, firstName)
+				if upsertErr != nil {
+					return nil, upsertErr
+				}
+				if user.IsBanned {
+					return nil, domain.ErrForbidden
+				}
+				return user, nil
+			}
+		}
+		return nil, domain.ErrUnauthorized
+	}
+
 	tgID, username, firstName := extractTelegramData(initData)
+	if tgID == 0 {
+		return nil, domain.ErrUnauthorized
+	}
 
 	user, err := s.userRepo.Upsert(ctx, tgID, username, firstName)
 	if err != nil {
 		return nil, err
+	}
+	if user.IsBanned {
+		return nil, domain.ErrForbidden
 	}
 	return user, nil
 }
@@ -159,10 +225,27 @@ func (s *AuthService) ValidateAdminToken(tokenStr string) (*AdminClaims, error) 
 func extractTelegramData(initData string) (telegramID int64, username, firstName *string) {
 	parsed, _ := url.ParseQuery(initData)
 
+	if userJSON := parsed.Get("user"); userJSON != "" {
+		var u struct {
+			ID        int64  `json:"id"`
+			Username  string `json:"username"`
+			FirstName string `json:"first_name"`
+		}
+		if json.Unmarshal([]byte(userJSON), &u) == nil && u.ID != 0 {
+			telegramID = u.ID
+			if u.Username != "" {
+				username = &u.Username
+			}
+			if u.FirstName != "" {
+				firstName = &u.FirstName
+			}
+			return
+		}
+	}
+
 	if id := parsed.Get("id"); id != "" {
 		fmt.Sscanf(id, "%d", &telegramID)
 	}
-
 	u := parsed.Get("username")
 	if u != "" {
 		username = &u

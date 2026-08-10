@@ -55,3 +55,20 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+
+# Temp & junk
+tmp-*.json
+tmp_*.json
+tmp_*.bin
+tmp_*.sql
+tmp_*.txt
+*.bin
+0
+test_admin.png
+test_tma.png
+notion_page.json
+working_proxies.txt
+uploads/
+exports/
+tma-backend/.../
+tma-backend/working_proxies.txt

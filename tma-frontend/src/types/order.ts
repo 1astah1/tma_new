@@ -42,9 +42,9 @@ export interface OrderHistory {
 
 export const statusLabels: Record<OrderStatus, string> = {
   NEW: 'Новый',
-  WAITING_PAYMENT: 'Ожидает оплаты',
-  PAYMENT_VERIFICATION: 'Проверка платежа',
-  PAID: 'Оплачен',
+  WAITING_PAYMENT: 'Ожидает менеджера',
+  PAYMENT_VERIFICATION: 'Согласование',
+  PAID: 'В работе',
   WAITING_ACTIVATION: 'В очереди на активацию',
   AWAITING_CREDENTIALS: 'Требуются данные',
   CREDENTIALS_RECEIVED: 'Данные получены',
@@ -65,7 +65,7 @@ export const statusColors: Record<OrderStatus, string> = {
   WAITING_PAYMENT: 'bg-blue-100 text-blue-800',
   PAYMENT_VERIFICATION: 'bg-orange-100 text-orange-800',
   PAID: 'bg-green-100 text-green-800',
-  WAITING_ACTIVATION: 'bg-purple-100 text-purple-800',
+  WAITING_ACTIVATION: 'bg-amber-100 text-amber-800',
   AWAITING_CREDENTIALS: 'bg-blue-100 text-blue-800',
   CREDENTIALS_RECEIVED: 'bg-yellow-100 text-yellow-800',
   CREDENTIALS_INVALID: 'bg-red-100 text-red-800',

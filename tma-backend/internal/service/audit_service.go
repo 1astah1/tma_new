@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"tma-backend/internal/domain"
@@ -33,7 +34,13 @@ func (s *AuditService) Log(ctx context.Context, adminID uuid.UUID, actionType, t
 	}
 
 	go func() {
-		s.repo.AddLog(context.Background(), log)
+		if err := s.repo.AddLog(context.Background(), log); err != nil {
+			slog.Error("audit log write failed",
+				slog.String("action_type", actionType),
+				slog.String("target_type", targetType),
+				slog.String("error", err.Error()),
+			)
+		}
 	}()
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE catalog_imports ADD COLUMN IF NOT EXISTS release_date TIMESTAMPTZ;

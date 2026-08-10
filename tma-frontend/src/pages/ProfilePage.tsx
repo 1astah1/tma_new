@@ -12,7 +12,7 @@ export function ProfilePage() {
   if (isLoading) return <div className="flex justify-center py-20"><Loader /></div>
 
   return (
-    <div className="pb-24">
+    <div className="pb-page">
       <Header title="Профиль" />
       <div className="p-4 space-y-4">
         <Card>
@@ -31,14 +31,14 @@ export function ProfilePage() {
         </Card>
 
         <div className="space-y-2">
-          <button
+          {/* <button
             onClick={() => nav('/orders')}
             className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"
           >
             <span className="text-xl">📋</span>
             <span className="font-medium">Мои заказы</span>
             <span className="ml-auto text-[var(--tg-hint)]">→</span>
-          </button>
+          </button> */}
           <button
             onClick={() => nav('/cart')}
             className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"

@@ -107,110 +107,7 @@ func TestConfirmPayment_WrongStatus(t *testing.T) {
 	orderRepo.AssertExpectations(t)
 }
 
-func TestIssueKey_Success(t *testing.T) {
-	svc, orderRepo, _, keyRepo, _, _, chatRepo, _, notifSvc, auditSvc := newTestOrderService()
-
-	orderID := uuid.New()
-	adminID := uuid.New()
-	keyID := uuid.New()
-
-	order := &domain.Order{
-		ID:             orderID,
-		Status:         domain.OrderStatusPaid,
-		DeliveryMethod: domain.DeliveryMethodKey,
-		ProductID:      uuid.New(),
-		UserID:         uuid.New(),
-	}
-
-	key := &domain.ProductKey{
-		ID:  keyID,
-		Key: "TEST-KEY-12345",
-	}
-
-	ctx := context.Background()
-	orderRepo.On("GetByID", ctx, orderID).Return(order, nil)
-	orderRepo.On("GetByIDWithJoins", ctx, orderID).Return(order, nil).Times(2)
-	keyRepo.On("AssignAvailableKey", ctx, order.ProductID, orderID).Return(key, nil)
-	orderRepo.On("Update", ctx, mock.AnythingOfType("*domain.Order")).Return(nil)
-	chatRepo.On("Create", ctx, mock.AnythingOfType("*domain.ChatMessage")).Return(nil)
-	orderRepo.On("UpdateStatus", ctx, orderID, domain.OrderStatusKeyIssued).Return(nil)
-	orderRepo.On("UpdateStatus", ctx, orderID, domain.OrderStatusCompleted).Return(nil)
-	orderRepo.On("AddHistory", ctx, mock.AnythingOfType("*domain.OrderHistory")).Return(nil).Times(2)
-	auditSvc.On("Log", ctx, adminID, "order_status_change", "order", orderID, mock.AnythingOfType("map[string]interface {}")).Return()
-	notifSvc.On("SendOrderStatusUpdate", mock.Anything, mock.AnythingOfType("*domain.Order")).Return(nil).Times(2)
-
-	err := svc.IssueKey(ctx, orderID, adminID)
-	require.NoError(t, err)
-
-	time.Sleep(50 * time.Millisecond)
-
-	orderRepo.AssertExpectations(t)
-	keyRepo.AssertExpectations(t)
-	chatRepo.AssertExpectations(t)
-	auditSvc.AssertExpectations(t)
-}
-
-func TestIssueKey_OrderNotFound(t *testing.T) {
-	svc, orderRepo, _, _, _, _, _, _, _, _ := newTestOrderService()
-
-	orderID := uuid.New()
-	adminID := uuid.New()
-
-	ctx := context.Background()
-	orderRepo.On("GetByID", ctx, orderID).Return((*domain.Order)(nil), domain.ErrNotFound)
-
-	err := svc.IssueKey(ctx, orderID, adminID)
-	assert.Error(t, err)
-	assert.Equal(t, domain.ErrNotFound, err)
-
-	orderRepo.AssertExpectations(t)
-}
-
-func TestIssueKey_WrongStatus(t *testing.T) {
-	svc, orderRepo, _, _, _, _, _, _, _, _ := newTestOrderService()
-
-	orderID := uuid.New()
-	adminID := uuid.New()
-
-	order := &domain.Order{
-		ID:             orderID,
-		Status:         domain.OrderStatusNew,
-		DeliveryMethod: domain.DeliveryMethodKey,
-	}
-
-	ctx := context.Background()
-	orderRepo.On("GetByID", ctx, orderID).Return(order, nil)
-
-	err := svc.IssueKey(ctx, orderID, adminID)
-	assert.Error(t, err)
-	assert.Equal(t, domain.ErrOrderStatusInvalid, err)
-
-	orderRepo.AssertExpectations(t)
-}
-
-func TestIssueKey_WrongDeliveryMethod(t *testing.T) {
-	svc, orderRepo, _, _, _, _, _, _, _, _ := newTestOrderService()
-
-	orderID := uuid.New()
-	adminID := uuid.New()
-
-	order := &domain.Order{
-		ID:             orderID,
-		Status:         domain.OrderStatusPaid,
-		DeliveryMethod: domain.DeliveryMethodActivation,
-	}
-
-	ctx := context.Background()
-	orderRepo.On("GetByID", ctx, orderID).Return(order, nil)
-
-	err := svc.IssueKey(ctx, orderID, adminID)
-	assert.Error(t, err)
-	assert.Equal(t, domain.ErrOrderStatusInvalid, err)
-
-	orderRepo.AssertExpectations(t)
-}
-
-func TestCancelOrder_ReleasesKey(t *testing.T) {
+func TestCancelOrder_WithLegacyKeyID(t *testing.T) {
 	svc, orderRepo, _, keyRepo, _, _, _, _, notifSvc, auditSvc := newTestOrderService()
 
 	orderID := uuid.New()
@@ -228,7 +125,6 @@ func TestCancelOrder_ReleasesKey(t *testing.T) {
 	ctx := context.Background()
 	orderRepo.On("GetByID", ctx, orderID).Return(order, nil)
 	orderRepo.On("GetByIDWithJoins", ctx, orderID).Return(order, nil)
-	keyRepo.On("ReleaseKey", ctx, keyID).Return(nil)
 	orderRepo.On("Update", ctx, mock.AnythingOfType("*domain.Order")).Return(nil)
 	orderRepo.On("UpdateStatus", ctx, orderID, domain.OrderStatusCancelled).Return(nil)
 	orderRepo.On("AddHistory", ctx, mock.AnythingOfType("*domain.OrderHistory")).Return(nil)
@@ -241,7 +137,7 @@ func TestCancelOrder_ReleasesKey(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	orderRepo.AssertExpectations(t)
-	keyRepo.AssertExpectations(t)
+	keyRepo.AssertNotCalled(t, "ReleaseKey", mock.Anything, mock.Anything)
 	auditSvc.AssertExpectations(t)
 }
 
@@ -409,7 +305,7 @@ func TestRequestRefund_NotRefundable(t *testing.T) {
 	orderRepo.AssertExpectations(t)
 }
 
-func TestProcessRefund_ReleasesKey(t *testing.T) {
+func TestProcessRefund_WithLegacyKeyID(t *testing.T) {
 	svc, orderRepo, _, keyRepo, _, _, _, _, notifSvc, auditSvc := newTestOrderService()
 
 	orderID := uuid.New()
@@ -426,7 +322,6 @@ func TestProcessRefund_ReleasesKey(t *testing.T) {
 	ctx := context.Background()
 	orderRepo.On("GetByID", ctx, orderID).Return(order, nil)
 	orderRepo.On("GetByIDWithJoins", ctx, orderID).Return(order, nil)
-	keyRepo.On("ReleaseKey", ctx, keyID).Return(nil)
 	orderRepo.On("UpdateStatus", ctx, orderID, domain.OrderStatusRefunded).Return(nil)
 	orderRepo.On("AddHistory", ctx, mock.AnythingOfType("*domain.OrderHistory")).Return(nil)
 	auditSvc.On("Log", ctx, adminID, "order_status_change", "order", orderID, mock.AnythingOfType("map[string]interface {}")).Return()
@@ -438,7 +333,7 @@ func TestProcessRefund_ReleasesKey(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	orderRepo.AssertExpectations(t)
-	keyRepo.AssertExpectations(t)
+	keyRepo.AssertNotCalled(t, "ReleaseKey", mock.Anything, mock.Anything)
 	auditSvc.AssertExpectations(t)
 }
 
@@ -467,12 +362,13 @@ func TestCancelOrderByUser_Success(t *testing.T) {
 	svc, orderRepo, _, _, _, _, _, _, notifSvc, _ := newTestOrderService()
 
 	orderID := uuid.New()
+	userID := uuid.New()
 	reason := "Changed my mind"
 
 	order := &domain.Order{
 		ID:     orderID,
 		Status: domain.OrderStatusNew,
-		UserID: uuid.New(),
+		UserID: userID,
 	}
 
 	ctx := context.Background()
@@ -483,7 +379,7 @@ func TestCancelOrderByUser_Success(t *testing.T) {
 	orderRepo.On("AddHistory", ctx, mock.AnythingOfType("*domain.OrderHistory")).Return(nil)
 	notifSvc.On("SendOrderStatusUpdate", mock.Anything, mock.AnythingOfType("*domain.Order")).Return(nil)
 
-	err := svc.CancelOrderByUser(ctx, orderID, reason)
+	err := svc.CancelOrderByUser(ctx, orderID, userID, reason)
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
@@ -496,17 +392,19 @@ func TestCancelOrderByUser_TooLate(t *testing.T) {
 	svc, orderRepo, _, _, _, _, _, _, _, _ := newTestOrderService()
 
 	orderID := uuid.New()
+	userID := uuid.New()
 	reason := "Changed my mind"
 
 	order := &domain.Order{
 		ID:     orderID,
 		Status: domain.OrderStatusPaid,
+		UserID: userID,
 	}
 
 	ctx := context.Background()
 	orderRepo.On("GetByID", ctx, orderID).Return(order, nil)
 
-	err := svc.CancelOrderByUser(ctx, orderID, reason)
+	err := svc.CancelOrderByUser(ctx, orderID, userID, reason)
 	assert.Error(t, err)
 	assert.Equal(t, domain.ErrOrderStatusInvalid, err)
 

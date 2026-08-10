@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,7 +50,44 @@ func getExecDir() string {
 	return filepath.Dir(exe)
 }
 
+func loadEnvFile() {
+	candidates := []string{
+		".env",
+		filepath.Join(getExecDir(), ".env"),
+	}
+	for _, path := range candidates {
+		if err := parseEnvFile(path); err == nil {
+			return
+		}
+	}
+}
+
+func parseEnvFile(path string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		if key != "" {
+			os.Setenv(key, val)
+		}
+	}
+	return nil
+}
+
 func Load() *Config {
+	loadEnvFile()
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		panic("JWT_SECRET environment variable is required")
@@ -78,7 +116,7 @@ func Load() *Config {
 			WebhookURL: getEnv("BOT_WEBHOOK_URL", ""),
 			EncryptKey: encryptKey,
 		},
-		UploadDir: filepath.Join(getExecDir(), "uploads"),
+		UploadDir: getEnv("UPLOAD_DIR", filepath.Join(getExecDir(), "uploads")),
 		App: AppConfig{
 			Environment: getEnv("ENVIRONMENT", "development"),
 			LogLevel:    getEnv("LOG_LEVEL", "debug"),

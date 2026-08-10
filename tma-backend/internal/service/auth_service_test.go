@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 	"tma-backend/internal/config"
@@ -228,14 +229,14 @@ func TestAuthenticateUser(t *testing.T) {
 
 	user := &domain.User{
 		ID:         uuid.New(),
-		TelegramID: 999999,
-		Username:   strPtr("newuser"),
+		TelegramID: 123456789,
+		Username:   strPtr("test_user"),
 	}
 
 	ctx := context.Background()
-	userRepo.On("Upsert", ctx, int64(999999), (*string)(nil), (*string)(nil)).Return(user, nil)
+	userRepo.On("Upsert", ctx, int64(123456789), mock.AnythingOfType("*string"), mock.AnythingOfType("*string")).Return(user, nil)
 
-	result, err := svc.AuthenticateUser(ctx, "id=999999")
+	result, err := svc.AuthenticateUser(ctx, "test", true)
 	require.NoError(t, err)
 	assert.Equal(t, user.ID, result.ID)
 

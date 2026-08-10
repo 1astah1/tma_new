@@ -24,15 +24,19 @@ type OrderStore interface {
 	GetHistory(ctx context.Context, orderID uuid.UUID) ([]domain.OrderHistory, error)
 	GetExpired2FA(ctx context.Context, timeout time.Duration) ([]domain.Order, error)
 	GetExpiredWaitingPayment(ctx context.Context, timeout time.Duration) ([]domain.Order, error)
+	GetWaitingPaymentOlderThan(ctx context.Context, minAge, maxAge time.Duration) ([]domain.Order, error)
 	GetDashboardStats(ctx context.Context) (map[string]interface{}, error)
 }
 
 type ProductStore interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.Product, error)
 	List(ctx context.Context, f repository.ProductFilter) ([]domain.Product, int, error)
+	ListActiveByTitleKey(ctx context.Context, titleKey string) ([]domain.Product, error)
 	Create(ctx context.Context, p *domain.Product) error
 	Update(ctx context.Context, p *domain.Product) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	ActivateAllGames(ctx context.Context) (int64, error)
+	SyncMetadataFromImports(ctx context.Context, minPrice float64) (int64, error)
 }
 
 type KeyStore interface {
@@ -52,7 +56,7 @@ type AccountStore interface {
 type UserStore interface {
 	Upsert(ctx context.Context, telegramID int64, username, firstName *string) (*domain.User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error)
-	List(ctx context.Context, search string, page, limit int) ([]domain.User, int, error)
+	List(ctx context.Context, search, sortField, sortOrder string, page, limit int) ([]domain.User, int, error)
 	UpdateBan(ctx context.Context, id uuid.UUID, isBanned bool) error
 	UpdateAdminNotes(ctx context.Context, id uuid.UUID, notes string) error
 }
@@ -64,6 +68,7 @@ type ChatStore interface {
 
 type Notifier interface {
 	SendOrderStatusUpdate(ctx context.Context, order *domain.Order)
+	SendUserMessage(ctx context.Context, telegramID int64, text string)
 }
 
 type Auditor interface {

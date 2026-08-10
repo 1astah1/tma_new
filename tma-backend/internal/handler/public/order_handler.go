@@ -46,11 +46,7 @@ func (h *OrderHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dm := domain.DeliveryMethod(req.DeliveryMethod)
-	if dm != domain.DeliveryMethodKey && dm != domain.DeliveryMethodActivation {
-		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid delivery method")
-		return
-	}
+	dm := domain.DeliveryMethodActivation
 
 	qty := 1
 	if req.Quantity != nil && *req.Quantity > 0 {
@@ -110,8 +106,13 @@ func (h *OrderHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := h.svc.GetByID(r.Context(), id)
+	userID := handler.GetUserID(r.Context())
+	order, err := h.svc.GetByIDForUser(r.Context(), id, userID)
 	if err != nil {
+		if err == domain.ErrForbidden {
+			handler.RespondError(w, http.StatusForbidden, "FORBIDDEN", "Access denied")
+			return
+		}
 		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Order not found")
 		return
 	}
@@ -134,11 +135,12 @@ func (h *OrderHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Items []struct {
-			ProductID      string `json:"product_id"`
-			DeliveryMethod string `json:"delivery_method"`
+			ProductID      string  `json:"product_id"`
+			DeliveryMethod string  `json:"delivery_method"`
 			VariantID      *string `json:"variant_id"`
-			Quantity       int    `json:"quantity"`
+			Quantity       int     `json:"quantity"`
 		} `json:"items"`
+		PromoCode string `json:"promo_code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid JSON")
@@ -160,11 +162,7 @@ func (h *OrderHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		dm := domain.DeliveryMethod(item.DeliveryMethod)
-		if dm != domain.DeliveryMethodKey && dm != domain.DeliveryMethodActivation {
-			handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid delivery method")
-			return
-		}
+		dm := domain.DeliveryMethodActivation
 
 		qty := item.Quantity
 		if qty < 1 {
@@ -181,6 +179,19 @@ func (h *OrderHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 			totalAmount += *order.PaymentAmount
 		}
 		orders = append(orders, order)
+	}
+
+	if req.PromoCode != "" {
+		if err := h.svc.ApplyPromoToOrders(r.Context(), orders, req.PromoCode); err != nil {
+			handler.RespondError(w, http.StatusBadRequest, "PROMO_ERROR", err.Error())
+			return
+		}
+		totalAmount = 0
+		for _, order := range orders {
+			if order.PaymentAmount != nil {
+				totalAmount += *order.PaymentAmount
+			}
+		}
 	}
 
 	handler.RespondJSON(w, http.StatusCreated, map[string]interface{}{
@@ -277,7 +288,8 @@ func (h *OrderHandler) ConfirmBatchPayment(w http.ResponseWriter, r *http.Reques
 			continue
 		}
 
-		if err := h.svc.UploadReceipt(r.Context(), id, paymentMethod, receiptURL); err != nil {
+		userID := handler.GetUserID(r.Context())
+		if err := h.svc.UploadReceipt(r.Context(), id, userID, paymentMethod, receiptURL); err != nil {
 			failed = append(failed, map[string]interface{}{"order_id": idStr, "error": err.Error()})
 		} else {
 			processed = append(processed, idStr)
@@ -357,7 +369,8 @@ func (h *OrderHandler) ConfirmPayment(w http.ResponseWriter, r *http.Request) {
 
 	receiptURL := "/uploads/" + filename
 
-	if err := h.svc.UploadReceipt(r.Context(), id, paymentMethod, receiptURL); err != nil {
+	userID := handler.GetUserID(r.Context())
+	if err := h.svc.UploadReceipt(r.Context(), id, userID, paymentMethod, receiptURL); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", err.Error())
 		return
 	}
@@ -408,7 +421,8 @@ func (h *OrderHandler) Send2FACode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Receive2FA(r.Context(), id, req.Code); err != nil {
+	userID := handler.GetUserID(r.Context())
+	if err := h.svc.Receive2FA(r.Context(), id, userID, req.Code); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", err.Error())
 		return
 	}
@@ -428,7 +442,8 @@ func (h *OrderHandler) CancelOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
-	if err := h.svc.CancelOrderByUser(r.Context(), id, req.Reason); err != nil {
+	userID := handler.GetUserID(r.Context())
+	if err := h.svc.CancelOrderByUser(r.Context(), id, userID, req.Reason); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", err.Error())
 		return
 	}
@@ -448,7 +463,8 @@ func (h *OrderHandler) RequestRefund(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
-	if err := h.svc.RequestRefundByUser(r.Context(), id, req.Reason); err != nil {
+	userID := handler.GetUserID(r.Context())
+	if err := h.svc.RequestRefundByUser(r.Context(), id, userID, req.Reason); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", err.Error())
 		return
 	}
@@ -488,7 +504,8 @@ func (h *OrderHandler) GetChatMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := h.svc.GetChatMessages(r.Context(), id)
+	userID := handler.GetUserID(r.Context())
+	messages, err := h.svc.GetChatMessagesForUser(r.Context(), id, userID)
 	if err != nil {
 		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return

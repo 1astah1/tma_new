@@ -3,15 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --tg-bg: #0f0f23;
-  --tg-text: #e4e4f0;
-  --tg-button: #7c73ff;
-  --tg-button-text: #ffffff;
-  --tg-hint: #6b6b80;
-  --tg-secondary: #1a1a35;
-  --tg-border: #2a2a45;
-  --tg-card: #16163a;
-  --tg-glass: rgba(22,22,58,0.85);
+  --tg-bg: #0c0c0c;
+  --tg-text: #ffffff;
+  --tg-button: #c9a84c;
+  --tg-button-text: #0c0c0c;
+  --tg-hint: #6b6b6b;
+  --tg-secondary: #1a1a1a;
+  --tg-border: #2a2a2a;
+  --tg-card: #161616;
+  --tg-glass: rgba(22,22,22,0.85);
   --tg-alert-info-bg: rgba(59,130,246,0.15);
   --tg-alert-info-border: rgba(59,130,246,0.3);
   --tg-alert-info-text: #93c5fd;
@@ -26,8 +26,30 @@
   --tg-alert-error-text: #fca5a5;
   --tg-input-bg: rgba(255,255,255,0.05);
   --tg-input-border: rgba(255,255,255,0.1);
-  --tg-input-text: #e4e4f0;
-  --tg-input-placeholder: #6b6b80;
+  --tg-input-text: #ffffff;
+  --tg-input-placeholder: #6b6b6b;
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-nav-offset: calc(4.75rem + var(--app-safe-bottom));
+  --app-page-padding: calc(var(--app-nav-offset) + 0.75rem);
+  --app-bar-padding: calc(var(--app-nav-offset) + 12.5rem);
+}
+
+html, body, #root {
+  min-height: 100%;
+  min-height: var(--tg-viewport-height, 100vh);
+  overflow-x: hidden;
+}
+
+@layer utilities {
+  .pb-page {
+    padding-bottom: var(--app-page-padding);
+  }
+  .pb-page-bar {
+    padding-bottom: var(--app-bar-padding);
+  }
+  .bottom-above-nav {
+    bottom: var(--app-nav-offset);
+  }
 }
 
 body {

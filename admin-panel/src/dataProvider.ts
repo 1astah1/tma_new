@@ -28,7 +28,7 @@ export const dataProvider: DataProvider = {
 
   getOne: async (resource, params) => {
     const { json } = await httpClient(`${apiUrl}/${resource}/${params.id}`)
-    const order = json.order || json
+    const order = json.order || json.user || json
     const history = json.history || []
     const account = json.account || null
     const key = json.key || null

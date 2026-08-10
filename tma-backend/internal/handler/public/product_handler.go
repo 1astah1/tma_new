@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ import (
 )
 
 type ProductHandler struct {
-	svc       *service.ProductService
+	svc         *service.ProductService
 	productRepo *repository.ProductRepo
 }
 
@@ -34,6 +35,9 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := q.Get("type"); v != "" {
 		f.Type = &v
+	}
+	if v := q.Get("section"); v != "" {
+		f.Section = &v
 	}
 	if v := q.Get("search"); v != "" {
 		f.Search = &v
@@ -75,26 +79,8 @@ func (h *ProductHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type ProductWithKeys struct {
-		domain.Product
-		AvailableKeys int `json:"available_keys"`
-	}
-
-	result := make([]ProductWithKeys, 0, len(products))
-	for _, p := range products {
-		pwk := ProductWithKeys{Product: p}
-		for _, dm := range p.DeliveryMethods {
-			if dm == "key" {
-				cnt, _ := h.productRepo.CountAvailableKeys(r.Context(), p.ID)
-				pwk.AvailableKeys = cnt
-				break
-			}
-		}
-		result = append(result, pwk)
-	}
-
 	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"data": result,
+		"data": products,
 		"meta": map[string]interface{}{
 			"page":  f.Page,
 			"limit": f.Limit,
@@ -116,23 +102,55 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type ProductWithKeys struct {
-		domain.Product
-		AvailableKeys int `json:"available_keys"`
-		OrderCount    int `json:"order_count"`
+	type PlatformVariant struct {
+		ID              uuid.UUID       `json:"id"`
+		Platform        domain.Platform `json:"platform"`
+		Price           float64         `json:"price"`
+		DiscountPercent float64         `json:"discount_percent"`
+		ImageURL        *string         `json:"image_url"`
 	}
 
-	pwk := ProductWithKeys{Product: *product}
-	for _, dm := range product.DeliveryMethods {
-		if dm == "key" {
-			cnt, _ := h.productRepo.CountAvailableKeys(r.Context(), id)
-			pwk.AvailableKeys = cnt
-			break
+	type ProductDetail struct {
+		domain.Product
+		OrderCount        int               `json:"order_count"`
+		PlatformVariants  []PlatformVariant `json:"platform_variants,omitempty"`
+	}
+
+	detail := ProductDetail{Product: *product}
+	detail.OrderCount, _ = h.productRepo.CountOrders(r.Context(), id)
+
+	titleKey := strings.TrimSpace(product.TitleKey)
+	if titleKey == "" {
+		titleKey = service.NormalizeGameTitle(product.Title)
+	}
+	if titleKey != "" {
+		variants, err := h.productRepo.ListActiveByTitleKey(r.Context(), titleKey)
+		if err == nil && len(variants) > 0 {
+			familyProducts := service.SelectBestFamilyProducts(variants)
+			for _, variant := range familyProducts {
+				detail.PlatformVariants = append(detail.PlatformVariants, PlatformVariant{
+					ID:              variant.ID,
+					Platform:        variant.Platform,
+					Price:           variant.Price,
+					DiscountPercent: variant.DiscountPercent,
+					ImageURL:        variant.ImageURL,
+				})
+			}
+			if merged := service.MergeProductPrices(familyProducts); merged != nil {
+				detail.Prices = merged
+			}
+			if len(detail.PlatformVariants) > 1 {
+				for _, variant := range variants {
+					if variant.ImageURL != nil && *variant.ImageURL != "" {
+						detail.ImageURL = variant.ImageURL
+						break
+					}
+				}
+			}
 		}
 	}
-	pwk.OrderCount, _ = h.productRepo.CountOrders(r.Context(), id)
 
-	handler.RespondJSON(w, http.StatusOK, pwk)
+	handler.RespondJSON(w, http.StatusOK, detail)
 }
 
 func (h *ProductHandler) GetPlatforms(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +158,7 @@ func (h *ProductHandler) GetPlatforms(w http.ResponseWriter, r *http.Request) {
 		{"id": "ps4", "name": "PlayStation 4"},
 		{"id": "ps5", "name": "PlayStation 5"},
 		{"id": "xbox", "name": "Xbox"},
+		{"id": "pc", "name": "PC"},
 	}
 	handler.RespondJSON(w, http.StatusOK, platforms)
 }

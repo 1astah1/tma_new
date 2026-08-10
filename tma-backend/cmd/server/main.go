@@ -22,9 +22,9 @@ import (
 	"tma-backend/internal/bot"
 	"tma-backend/internal/config"
 	"tma-backend/internal/domain"
+	h "tma-backend/internal/handler"
 	"tma-backend/internal/handler/admin"
 	"tma-backend/internal/handler/public"
-	h "tma-backend/internal/handler"
 	"tma-backend/internal/logger"
 	"tma-backend/internal/middleware"
 	"tma-backend/internal/repository"
@@ -58,18 +58,82 @@ func main() {
 	adminRepo := repository.NewAdminRepo(db)
 	accountRepo := repository.NewAccountRepo(db)
 	settingsRepo := repository.NewSettingsRepo(db)
+	if err := service.LoadPricingFormulasFromSettings(context.Background(), settingsRepo); err != nil {
+		slog.Warn("pricing formulas load failed", slog.String("error", err.Error()))
+	}
 	promoRepo := repository.NewPromoCodeRepo(db)
 	chatRepo := repository.NewChatRepo(db)
 	templateRepo := repository.NewTemplateRepo(db)
+	catalogImportRepo := repository.NewCatalogImportRepo(db)
+	if err := catalogImportRepo.EnsureSchema(context.Background()); err != nil {
+		slog.Error("Failed to ensure catalog import schema", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 
 	// Services
 	encSvc := service.NewEncryptionService(cfg.Telegram.EncryptKey)
 	authSvc := service.NewAuthService(cfg, userRepo, adminRepo)
 	notifSvc := service.NewNotificationService(cfg.Telegram.BotToken)
+	notifSvc.SetTMAURL(cfg.App.TMAURL)
 	auditSvc := service.NewAuditService(adminRepo)
-	productSvc := service.NewProductService(productRepo)
-	orderSvc := service.NewOrderService(db, orderRepo, productRepo, keyRepo, accountRepo, userRepo, chatRepo, encSvc, notifSvc, auditSvc)
+	englishTitles := service.NewEnglishTitleResolver(func(ctx context.Context, productID uuid.UUID) (string, string, bool) {
+		return productRepo.GetImportLinkByProductID(ctx, productID)
+	})
+	productSvc := service.NewProductService(productRepo, englishTitles)
 	promoSvc := service.NewPromoService(promoRepo)
+	orderSvc := service.NewOrderService(db, orderRepo, productRepo, keyRepo, accountRepo, userRepo, chatRepo, promoSvc, encSvc, notifSvc, auditSvc)
+	catalogParserSvc := service.NewCatalogParserService(catalogImportRepo, settingsRepo)
+	catalogCurationSvc := service.NewCatalogCurationService(catalogImportRepo, productRepo, catalogParserSvc)
+	vitrinaSvc := service.NewVitrinaService(catalogImportRepo, productRepo, settingsRepo)
+	catalogRebuildSvc := service.NewCatalogRebuildService(catalogImportRepo, productRepo, settingsRepo, catalogParserSvc, catalogCurationSvc, vitrinaSvc)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		updated, err := vitrinaSvc.UpdateAllScores(ctx)
+		if err != nil {
+			slog.Warn("vitrina score recalc failed", slog.String("error", err.Error()))
+			return
+		}
+		slog.Info("vitrina scores recalculated", slog.Int64("updated", updated))
+	}()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		defer cancel()
+		if err := catalogImportRepo.BackfillImportMetadata(ctx); err != nil {
+			slog.Warn("catalog reclassify failed", slog.String("error", err.Error()))
+		}
+		if _, err := catalogImportRepo.ClearInvalidReleaseDates(ctx); err != nil {
+			slog.Warn("clear invalid import dates failed", slog.String("error", err.Error()))
+		}
+		if _, err := productRepo.ClearInvalidReleaseDates(ctx); err != nil {
+			slog.Warn("clear invalid product dates failed", slog.String("error", err.Error()))
+		}
+		result, err := catalogCurationSvc.AutoPublishFresh(ctx, 500)
+		if err != nil {
+			slog.Warn("catalog auto publish failed", slog.String("error", err.Error()))
+			return
+		}
+		slog.Info("catalog curation finished",
+			slog.Int64("published", result.Published),
+			slog.Int64("imports_rejected", result.ImportsRejected),
+			slog.Int64("products_deleted", result.ProductsDeleted),
+		)
+	}()
+
+	go func() {
+		ctx := context.Background()
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			runCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+			if _, err := catalogCurationSvc.AutoPublishFresh(runCtx, 300); err != nil {
+				slog.Warn("scheduled catalog curation failed", slog.String("error", err.Error()))
+			}
+			cancel()
+		}
+	}()
 
 	// Start background workers
 	go func() {
@@ -83,7 +147,7 @@ func main() {
 	}()
 
 	// Init bot
-	tgBot := bot.NewBot(cfg.Telegram.BotToken)
+	tgBot := bot.NewBot(cfg.Telegram.BotToken, db, adminRepo, orderRepo, userRepo, notifSvc, orderSvc, cfg.App.TMAURL, fmt.Sprintf("http://localhost:%s", cfg.Server.Port))
 
 	// Ensure upload dir exists
 	os.MkdirAll(cfg.UploadDir, 0755)
@@ -98,7 +162,11 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recover())
 	r.Use(middleware.Logging)
-	r.Use(middleware.CORS(cfg.App.TMAURL, cfg.App.AdminURL))
+	if cfg.App.Environment == "development" {
+		r.Use(middleware.CORS("*"))
+	} else {
+		r.Use(middleware.CORS(cfg.App.TMAURL, cfg.App.AdminURL))
+	}
 
 	// Rate limiter: 10 requests per second, burst of 20
 	rateLimiter := middleware.NewRateLimiter(10, 20)
@@ -115,14 +183,21 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Auth
 		r.Post("/auth/telegram", func(w http.ResponseWriter, r *http.Request) {
-			rateLimiter.Middleware(http.HandlerFunc(handleTelegramAuth(authSvc, userRepo))).ServeHTTP(w, r)
+			rateLimiter.Middleware(http.HandlerFunc(handleTelegramAuth(authSvc, cfg))).ServeHTTP(w, r)
 		})
 
-			// Public
+		// Public
 		productHandler := public.NewProductHandler(productSvc, productRepo)
 		r.Get("/products", productHandler.List)
 		r.Get("/products/{id}", productHandler.GetByID)
 		r.Get("/platforms", productHandler.GetPlatforms)
+		contentHandler := public.NewContentHandler(productRepo, settingsRepo, vitrinaSvc)
+		r.Get("/content/popular-products", contentHandler.PopularProducts)
+		r.Get("/content/home-feed", contentHandler.HomeFeed)
+		r.Get("/content/home-categories", contentHandler.HomeCategories)
+		r.Get("/content/home-categories/{id}", contentHandler.HomeCategoryByID)
+		r.Get("/content/home-banners", contentHandler.HomeBanners)
+		r.Get("/content/shop-settings", contentHandler.ShopSettings)
 
 		// Payment details (public)
 		publicPaymentHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo)
@@ -134,7 +209,7 @@ func main() {
 
 		// Protected routes
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.UserAuth(authSvc, cfg.App.Environment))
+			r.Use(middleware.UserAuth(authSvc, userRepo, cfg.App.Environment))
 
 			orderHandler := public.NewOrderHandler(orderSvc, cfg.UploadDir)
 			r.Post("/orders", func(w http.ResponseWriter, r *http.Request) {
@@ -143,14 +218,8 @@ func main() {
 			r.Post("/orders/batch", func(w http.ResponseWriter, r *http.Request) {
 				rateLimiter.Middleware(http.HandlerFunc(orderHandler.CreateBatch)).ServeHTTP(w, r)
 			})
-			r.Post("/orders/batch/confirm-payment", func(w http.ResponseWriter, r *http.Request) {
-				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmBatchPayment)).ServeHTTP(w, r)
-			})
 			r.Get("/orders", orderHandler.List)
 			r.Get("/orders/{id}", orderHandler.GetByID)
-			r.Post("/orders/{id}/confirm-payment", func(w http.ResponseWriter, r *http.Request) {
-				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmPayment)).ServeHTTP(w, r)
-			})
 			r.Post("/orders/{id}/credentials", func(w http.ResponseWriter, r *http.Request) {
 				rateLimiter.Middleware(http.HandlerFunc(orderHandler.SendCredentials)).ServeHTTP(w, r)
 			})
@@ -166,6 +235,12 @@ func main() {
 			r.Get("/orders/{id}/chat", orderHandler.GetChatMessages)
 			r.Post("/orders/{id}/chat", func(w http.ResponseWriter, r *http.Request) {
 				rateLimiter.Middleware(http.HandlerFunc(orderHandler.SendChatMessage)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/{id}/payment", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmPayment)).ServeHTTP(w, r)
+			})
+			r.Post("/orders/batch/payment", func(w http.ResponseWriter, r *http.Request) {
+				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmBatchPayment)).ServeHTTP(w, r)
 			})
 
 			profileHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo)
@@ -190,34 +265,56 @@ func main() {
 			bruteForce.Middleware(http.HandlerFunc(authHandler.Login)).ServeHTTP(w, r)
 		})
 
-		r.Post("/upload", handleFileUpload(cfg.UploadDir))
-
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AdminAuth(authSvc, cfg.App.Environment))
 
+			r.Post("/upload", handleFileUpload(cfg.UploadDir))
 			r.Get("/auth/me", authHandler.Me)
 
 			// Products (admin CRUD)
-			adminProductHandler := admin.NewAdminProductHandler(productSvc, productRepo)
+			adminProductHandler := admin.NewAdminProductHandler(productSvc, productRepo, catalogImportRepo)
 			r.Get("/products", adminProductHandler.List)
 			r.Get("/products/{id}", adminProductHandler.GetByID)
+			r.Post("/products/{id}/sync-from-import", adminProductHandler.SyncFromImport)
 			r.Post("/products", adminProductHandler.Create)
 			r.Put("/products/{id}", adminProductHandler.Update)
 			r.Delete("/products/{id}", adminProductHandler.Delete)
 
+			// Catalog imports (admin approval queue)
+			catalogImportHandler := admin.NewCatalogImportHandler(catalogImportRepo, productRepo, productSvc, catalogParserSvc, catalogCurationSvc, catalogRebuildSvc, vitrinaSvc)
+			r.Get("/catalog-imports", catalogImportHandler.List)
+			r.Get("/catalog-imports/summary", catalogImportHandler.Summary)
+			r.Get("/catalog-imports/filter-options", catalogImportHandler.FilterOptions)
+			r.Post("/catalog-imports/backfill-metadata", catalogImportHandler.BackfillMetadata)
+			r.Post("/catalog-imports/deduplicate", catalogImportHandler.Deduplicate)
+			r.Post("/catalog-imports/auto-publish-fresh", catalogImportHandler.AutoPublishFresh)
+			r.Post("/catalog-imports/refresh-catalog", catalogImportHandler.RefreshCatalog)
+			r.Post("/catalog-imports/rebuild", catalogImportHandler.RebuildCatalog)
+			r.Get("/catalog-imports/rebuild-status", catalogImportHandler.RebuildStatus)
+			r.Post("/catalog-imports/republish-pending", catalogImportHandler.RepublishPending)
+			r.Post("/catalog-imports/import-ps", catalogImportHandler.ImportPSStore)
+			r.Post("/catalog-imports/import-xbox", catalogImportHandler.ImportXbox)
+			r.Post("/catalog-imports/sync-catalog", catalogImportHandler.SyncCatalog)
+			r.Get("/catalog-imports/{id}", catalogImportHandler.GetByID)
+			r.Post("/catalog-imports/reset-rejected", catalogImportHandler.ResetRejected)
+			r.Post("/catalog-imports/{id}/approve", catalogImportHandler.Approve)
+			r.Post("/catalog-imports/{id}/reject", catalogImportHandler.Reject)
+			r.Get("/catalog-parser/status", catalogImportHandler.ParserStatus)
+			r.Post("/catalog-parser/run", catalogImportHandler.RunParser)
+			r.Post("/catalog-parser/reset", catalogImportHandler.ResetCatalog)
+			r.Post("/catalog-parser/activate-all-games", catalogImportHandler.ActivateAllGames)
+
 			// Dashboard
-			dashHandler := admin.NewDashboardHandler(orderSvc)
+			dashHandler := admin.NewDashboardHandler(orderSvc, catalogImportRepo)
 			r.Get("/dashboard", dashHandler.GetStats)
 
 			// Orders
-			orderHandler := admin.NewOrderHandler(orderSvc, orderRepo, keyRepo, adminRepo, encSvc, templateRepo)
+			orderHandler := admin.NewOrderHandler(orderSvc, orderRepo, adminRepo, encSvc, templateRepo)
 			r.Get("/orders", orderHandler.List)
 			r.Get("/orders/{id}", orderHandler.GetByID)
 			r.Patch("/orders/{id}/status", orderHandler.UpdateStatus)
 			r.Patch("/orders/bulk-status", orderHandler.BulkUpdateStatus)
 			r.Post("/orders/{id}/decrypt-credentials", orderHandler.DecryptCredentials)
-			r.Get("/orders/{id}/available-keys", orderHandler.GetAvailableKeys)
-			r.Post("/orders/{id}/assign-key", orderHandler.AssignSpecificKey)
 			r.Get("/orders/{id}/chat", orderHandler.GetChatMessages)
 			r.Post("/orders/{id}/chat", orderHandler.SendChatMessage)
 			r.Post("/orders/{id}/chat/template", orderHandler.SendTemplateMessage)
@@ -232,9 +329,13 @@ func main() {
 			r.Post("/admins", userHandler.CreateAdmin)
 			r.Put("/admins/{id}", userHandler.UpdateAdmin)
 
+			broadcastHandler := admin.NewBroadcastHandler(userRepo, notifSvc)
+			r.Post("/broadcast", broadcastHandler.Send)
+
 			// Settings
 			settingsHandler := admin.NewSettingsHandler(settingsRepo)
 			r.Get("/settings", settingsHandler.Get)
+			r.Get("/settings/pricing-preview", settingsHandler.PricingPreview)
 			r.Put("/settings", settingsHandler.Upsert)
 
 			// Promo codes (admin)
@@ -244,22 +345,6 @@ func main() {
 			r.Post("/promos", adminPromoHandler.Create)
 			r.Put("/promos/{id}", adminPromoHandler.Update)
 			r.Delete("/promos/{id}", adminPromoHandler.Delete)
-
-			// Keys (admin)
-			keyHandler := admin.NewKeyHandler(keyRepo)
-			r.Get("/keys", keyHandler.List)
-			r.Get("/keys/{id}", keyHandler.GetByID)
-			r.Post("/keys", keyHandler.Create)
-			r.Post("/keys/import", keyHandler.BulkImport)
-			r.Patch("/keys/{id}/status", keyHandler.UpdateStatus)
-			r.Patch("/keys/{id}", keyHandler.UpdateKey)
-			r.Post("/keys/{id}/release", keyHandler.ReleaseKey)
-			r.Delete("/keys/{id}", keyHandler.Delete)
-			r.Post("/keys/bulk-delete", keyHandler.BulkDelete)
-
-			// Product keys (admin)
-			r.Get("/products/{product_id}/keys", keyHandler.GetByProductID)
-			r.Get("/products/{product_id}/keys/stats", keyHandler.GetProductKeyStats)
 
 			// Templates & FAQ
 			templateHandler := admin.NewTemplateHandler(templateRepo)
@@ -279,9 +364,10 @@ func main() {
 		})
 	})
 
-	// Bot webhook
+	// Bot webhook + polling
 	if cfg.Telegram.BotToken != "" {
 		tgBot.RegisterRoutes(r)
+		tgBot.StartPolling(context.Background())
 	}
 
 	// Start server
@@ -290,7 +376,7 @@ func main() {
 		Addr:         addr,
 		Handler:      r,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 180 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -309,7 +395,7 @@ func main() {
 	}
 }
 
-func handleTelegramAuth(authSvc *service.AuthService, userRepo *repository.UserRepo) http.HandlerFunc {
+func handleTelegramAuth(authSvc *service.AuthService, cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			InitData string `json:"initData"`
@@ -319,21 +405,18 @@ func handleTelegramAuth(authSvc *service.AuthService, userRepo *repository.UserR
 			return
 		}
 
-		// For development, allow test auth
-		var user *domain.User
-		var err error
-
-		if req.InitData == "" || req.InitData == "test" {
-			// Dev mode: auto-create test user
-			tgID := int64(123456789)
-			username := "test_user"
-			user, err = userRepo.Upsert(r.Context(), tgID, &username, nil)
-		} else {
-			user, err = authSvc.AuthenticateUser(r.Context(), req.InitData)
-		}
-
+		devBypass := cfg.App.Environment == "development"
+		user, err := authSvc.AuthenticateUser(r.Context(), req.InitData, devBypass)
 		if err != nil {
-			h.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication failed")
+			if err == domain.ErrForbidden {
+				h.RespondError(w, http.StatusForbidden, "FORBIDDEN", "Account is banned")
+				return
+			}
+			msg := "Authentication failed"
+			if cfg.App.Environment == "development" {
+				msg = err.Error()
+			}
+			h.RespondError(w, http.StatusUnauthorized, "UNAUTHORIZED", msg)
 			return
 		}
 

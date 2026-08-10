@@ -5,15 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 	"tma-backend/internal/domain"
+	"tma-backend/internal/repository"
 )
 
 type NotificationService struct {
-	botToken   string
+	botToken    string
 	botUsername string
-	httpClient *http.Client
+	tmaURL      string
+	httpClient  *http.Client
 }
 
 func NewNotificationService(botToken string) *NotificationService {
@@ -27,10 +32,29 @@ func (s *NotificationService) SetBotUsername(username string) {
 	s.botUsername = username
 }
 
+func (s *NotificationService) SetTMAURL(url string) {
+	s.tmaURL = url
+}
+
 type InlineButton struct {
 	Text         string `json:"text"`
 	CallbackData string `json:"callback_data,omitempty"`
 	URL          string `json:"url,omitempty"`
+	WebAppURL    string `json:"-"`
+}
+
+func (b InlineButton) MarshalJSON() ([]byte, error) {
+	m := map[string]interface{}{"text": b.Text}
+	if b.CallbackData != "" {
+		m["callback_data"] = b.CallbackData
+	}
+	if b.URL != "" {
+		m["url"] = b.URL
+	}
+	if b.WebAppURL != "" {
+		m["web_app"] = map[string]string{"url": b.WebAppURL}
+	}
+	return json.Marshal(m)
 }
 
 func (s *NotificationService) SendMessage(ctx context.Context, chatID int64, text string, buttons [][]InlineButton) error {
@@ -40,8 +64,8 @@ func (s *NotificationService) SendMessage(ctx context.Context, chatID int64, tex
 	}
 
 	body := map[string]interface{}{
-		"chat_id": chatID,
-		"text":    text,
+		"chat_id":    chatID,
+		"text":       text,
 		"parse_mode": "HTML",
 	}
 
@@ -66,7 +90,96 @@ func (s *NotificationService) SendMessage(ctx context.Context, chatID int64, tex
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	var tgResp struct {
+		OK          bool   `json:"ok"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(bodyBytes, &tgResp); err != nil {
+		return fmt.Errorf("telegram response decode: %w", err)
+	}
+	if !tgResp.OK {
+		return fmt.Errorf("telegram: %s", tgResp.Description)
+	}
+
 	return nil
+}
+
+type BroadcastResult struct {
+	Total   int `json:"total"`
+	Sent    int `json:"sent"`
+	Failed  int `json:"failed"`
+	Blocked int `json:"blocked"`
+}
+
+func (s *NotificationService) BroadcastToUsers(ctx context.Context, telegramIDs []int64, text string, buttons [][]InlineButton) BroadcastResult {
+	result := BroadcastResult{Total: len(telegramIDs)}
+	if text == "" || len(telegramIDs) == 0 {
+		return result
+	}
+
+	for i, chatID := range telegramIDs {
+		if err := s.SendMessage(ctx, chatID, text, buttons); err != nil {
+			result.Failed++
+			if strings.Contains(strings.ToLower(err.Error()), "blocked") {
+				result.Blocked++
+			}
+			slog.Warn("broadcast send failed",
+				slog.Int64("chat_id", chatID),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			result.Sent++
+		}
+
+		if i+1 < len(telegramIDs) {
+			select {
+			case <-ctx.Done():
+				return result
+			case <-time.After(40 * time.Millisecond):
+			}
+		}
+	}
+
+	return result
+}
+
+func (s *NotificationService) BroadcastToAllUsers(ctx context.Context, userRepo *repository.UserRepo, text string, buttons [][]InlineButton) (BroadcastResult, error) {
+	ids, err := userRepo.ListTelegramIDsForBroadcast(ctx)
+	if err != nil {
+		return BroadcastResult{}, err
+	}
+	return s.BroadcastToUsers(ctx, ids, text, buttons), nil
+}
+
+func (s *NotificationService) SendToAdmins(ctx context.Context, text string, adminRepo *repository.AdminRepo) {
+	admins, err := adminRepo.List(ctx)
+	if err != nil {
+		slog.Error("failed to list admins for notification", slog.String("error", err.Error()))
+		return
+	}
+
+	for _, admin := range admins {
+		if !admin.IsActive {
+			continue
+		}
+		go func(tgID int64) {
+			if err := s.SendMessage(ctx, tgID, text, nil); err != nil {
+				slog.Error("failed to notify admin", slog.Int64("tg_id", tgID), slog.String("error", err.Error()))
+			}
+		}(admin.TelegramID)
+	}
+}
+
+func (s *NotificationService) SendUserMessage(ctx context.Context, telegramID int64, text string) {
+	if text == "" {
+		return
+	}
+	go func() {
+		if err := s.SendMessage(ctx, telegramID, text, nil); err != nil {
+			slog.Error("Failed to send user message", slog.String("error", err.Error()))
+		}
+	}()
 }
 
 func (s *NotificationService) SendOrderStatusUpdate(ctx context.Context, order *domain.Order) {
@@ -134,6 +247,10 @@ func (s *NotificationService) SendOrderStatusUpdate(ctx context.Context, order *
 	}
 
 	if text != "" {
+		if s.tmaURL != "" {
+			orderURL := fmt.Sprintf("%s/order/%s", strings.TrimRight(s.tmaURL, "/"), order.ID.String())
+			buttons = append(buttons, []InlineButton{{Text: "📱 Открыть в приложении", WebAppURL: orderURL}})
+		}
 		go func() {
 			if err := s.SendMessage(ctx, order.User.TelegramID, text, buttons); err != nil {
 				slog.Error("Failed to send notification", slog.String("error", err.Error()))

@@ -171,23 +171,3 @@ INSERT INTO product_keys (product_id, key, status) VALUES
 
 INSERT INTO admins (telegram_id, username, password_hash, roles, is_active) VALUES
     (111111, 'superadmin', '$2a$10$AIPtg4L1K3llSYaUI3AEsuSC8lYYS3mTapVkiyOwRLKv3XSJFLOne', '{super_admin,game_manager,activation_admin,support,finance}', true);
-
-DROP TABLE IF EXISTS payment_transactions;
-DROP TABLE IF EXISTS admin_actions_log;
-DROP TABLE IF EXISTS admins;
-DROP TABLE IF EXISTS user_accounts;
-DROP TABLE IF EXISTS product_keys;
-DROP TABLE IF EXISTS order_history;
-DROP TABLE IF EXISTS orders;
-DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS settings;
-DROP TYPE IF EXISTS transaction_status;
-DROP TYPE IF EXISTS changed_by_type;
-DROP TYPE IF EXISTS order_status;
-DROP TYPE IF EXISTS delivery_method;
-DROP TYPE IF EXISTS payment_method;
-DROP TYPE IF EXISTS key_status;
-DROP TYPE IF EXISTS product_status;
-DROP TYPE IF EXISTS product_type;
-DROP TYPE IF EXISTS platform_type;

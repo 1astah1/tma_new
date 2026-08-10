@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,7 +67,7 @@ func (r *UserRepo) Upsert(ctx context.Context, tgID int64, username, firstName *
 	return &u, nil
 }
 
-func (r *UserRepo) List(ctx context.Context, search string, page, limit int) ([]domain.User, int, error) {
+func (r *UserRepo) List(ctx context.Context, search, sortField, sortOrder string, page, limit int) ([]domain.User, int, error) {
 	var total int
 	countQuery := "SELECT COUNT(*) FROM users"
 	var countArgs []interface{}
@@ -78,6 +79,22 @@ func (r *UserRepo) List(ctx context.Context, search string, page, limit int) ([]
 		return nil, 0, err
 	}
 
+	orderBy := "created_at DESC"
+	switch sortField {
+	case "last_interaction":
+		if strings.EqualFold(sortOrder, "ASC") {
+			orderBy = "last_interaction ASC NULLS LAST"
+		} else {
+			orderBy = "last_interaction DESC NULLS LAST"
+		}
+	case "created_at":
+		if strings.EqualFold(sortOrder, "ASC") {
+			orderBy = "created_at ASC"
+		} else {
+			orderBy = "created_at DESC"
+		}
+	}
+
 	offset := (page - 1) * limit
 	query := "SELECT * FROM users"
 	var dataArgs []interface{}
@@ -85,7 +102,7 @@ func (r *UserRepo) List(ctx context.Context, search string, page, limit int) ([]
 		query += " WHERE username ILIKE '%' || $1 || '%' OR first_name ILIKE '%' || $1 || '%'"
 		dataArgs = append(dataArgs, search)
 	}
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", len(dataArgs)+1, len(dataArgs)+2)
+	query += fmt.Sprintf(" ORDER BY %s LIMIT $%d OFFSET $%d", orderBy, len(dataArgs)+1, len(dataArgs)+2)
 	dataArgs = append(dataArgs, limit, offset)
 
 	var users []domain.User
@@ -119,4 +136,17 @@ func (r *UserRepo) CountOrdersByStatus(ctx context.Context, userID uuid.UUID, st
 	var count int
 	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM orders WHERE user_id = $1 AND status = $2", userID, status)
 	return count, err
+}
+
+func (r *UserRepo) ListTelegramIDsForBroadcast(ctx context.Context) ([]int64, error) {
+	var ids []int64
+	err := r.db.SelectContext(ctx, &ids,
+		`SELECT telegram_id FROM users WHERE is_banned = false AND telegram_id > 0 ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	if ids == nil {
+		ids = []int64{}
+	}
+	return ids, nil
 }

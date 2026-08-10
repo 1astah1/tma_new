@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getMyOrders, getOrder, createOrder, createBatchOrder, confirmPayment, confirmBatchPayment, sendCredentials, send2FACode } from '../services/order.service'
+import { getMyOrders, getOrder, createOrder, createBatchOrder, sendCredentials, send2FACode } from '../services/order.service'
 
 export function useMyOrders(status?: string, page = 1) {
   return useQuery({
@@ -13,19 +13,19 @@ export function useOrder(id: string) {
     queryKey: ['order', id],
     queryFn: () => getOrder(id),
     enabled: !!id,
+    refetchInterval: 5000,
   })
 }
 
 export function useCreateOrder() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ productId, deliveryMethod, variantId, quantity = 1 }: {
+    mutationFn: ({ productId, variantId, quantity = 1 }: {
       productId: string
-      deliveryMethod: 'key' | 'activation'
       variantId?: string
       quantity?: number
     }) =>
-      createOrder(productId, deliveryMethod, variantId, quantity),
+      createOrder(productId, variantId, quantity),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['myOrders'] }),
   })
 }
@@ -33,30 +33,11 @@ export function useCreateOrder() {
 export function useCreateBatchOrder() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (items: { product_id: string; delivery_method: 'key' | 'activation'; variant_id?: string; quantity: number }[]) =>
-      createBatchOrder(items),
+    mutationFn: ({ items, promoCode }: {
+      items: { product_id: string; delivery_method: 'activation'; variant_id?: string; quantity: number }[]
+      promoCode?: string
+    }) => createBatchOrder(items, promoCode),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['myOrders'] }),
-  })
-}
-
-export function useConfirmPayment() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ orderId, paymentMethod, file }: { orderId: string; paymentMethod: string; file: File }) =>
-      confirmPayment(orderId, paymentMethod, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['order'] }),
-  })
-}
-
-export function useConfirmBatchPayment() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ orderIds, paymentMethod, file }: { orderIds: string[]; paymentMethod: string; file: File }) =>
-      confirmBatchPayment(orderIds, paymentMethod, file),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['myOrders'] })
-      qc.invalidateQueries({ queryKey: ['order'] })
-    },
   })
 }
 

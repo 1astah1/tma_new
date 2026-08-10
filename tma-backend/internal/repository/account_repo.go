@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -97,9 +98,13 @@ func (r *SettingsRepo) GetAll(ctx context.Context) (map[string]map[string]interf
 }
 
 func (r *SettingsRepo) Upsert(ctx context.Context, key string, value interface{}) error {
-	_, err := r.db.ExecContext(ctx,
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO settings (key, value, updated_at) 
 		 VALUES ($1, $2::jsonb, NOW())
-		 ON CONFLICT (key) DO UPDATE SET value=$2::jsonb, updated_at=NOW()`, key, value)
+		 ON CONFLICT (key) DO UPDATE SET value=$2::jsonb, updated_at=NOW()`, key, string(payload))
 	return err
 }

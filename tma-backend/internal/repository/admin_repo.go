@@ -2,6 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -62,10 +65,24 @@ func (r *AdminRepo) Update(ctx context.Context, a *domain.Admin) error {
 }
 
 func (r *AdminRepo) AddLog(ctx context.Context, log *domain.AdminActionLog) error {
-	_, err := r.db.NamedExecContext(ctx,
+	detailsJSON, err := json.Marshal(log.Details)
+	if err != nil {
+		return err
+	}
+	if log.Details == nil {
+		detailsJSON = []byte("{}")
+	}
+	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO admin_actions_log (admin_id, action_type, target_type, target_id, details, ip_address)
-		 VALUES (:admin_id, :action_type, :target_type, :target_id, :details, :ip_address)`, log)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+		log.AdminID, log.ActionType, log.TargetType, log.TargetID, detailsJSON, log.IPAddress,
+	)
 	return err
+}
+
+type adminActionLogRow struct {
+	domain.AdminActionLog
+	AdminUsername *string `db:"admin_username"`
 }
 
 type AuditFilter struct {
@@ -78,11 +95,40 @@ type AuditFilter struct {
 	Limit      int        `json:"limit"`
 }
 
-func (r *AdminRepo) GetLogs(ctx context.Context, f AuditFilter) ([]domain.AdminActionLog, int, error) {
-	var total int
-	countQuery := "SELECT COUNT(*) FROM admin_actions_log"
-	if err := r.db.GetContext(ctx, &total, countQuery); err != nil {
-		return nil, 0, err
+func (r *AdminRepo) buildAuditLogQuery(f AuditFilter, countOnly bool) (string, []interface{}) {
+	where := []string{"1=1"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if f.AdminID != nil {
+		where = append(where, fmt.Sprintf("l.admin_id = $%d", argIdx))
+		args = append(args, *f.AdminID)
+		argIdx++
+	}
+	if f.ActionType != nil && strings.TrimSpace(*f.ActionType) != "" {
+		where = append(where, fmt.Sprintf("l.action_type = $%d", argIdx))
+		args = append(args, strings.TrimSpace(*f.ActionType))
+		argIdx++
+	}
+	if f.TargetType != nil && strings.TrimSpace(*f.TargetType) != "" {
+		where = append(where, fmt.Sprintf("l.target_type = $%d", argIdx))
+		args = append(args, strings.TrimSpace(*f.TargetType))
+		argIdx++
+	}
+	if f.DateFrom != nil && strings.TrimSpace(*f.DateFrom) != "" {
+		where = append(where, fmt.Sprintf("l.created_at >= $%d::timestamptz", argIdx))
+		args = append(args, strings.TrimSpace(*f.DateFrom))
+		argIdx++
+	}
+	if f.DateTo != nil && strings.TrimSpace(*f.DateTo) != "" {
+		where = append(where, fmt.Sprintf("l.created_at <= $%d::timestamptz", argIdx))
+		args = append(args, strings.TrimSpace(*f.DateTo))
+		argIdx++
+	}
+
+	whereSQL := strings.Join(where, " AND ")
+	if countOnly {
+		return fmt.Sprintf("SELECT COUNT(*) FROM admin_actions_log l WHERE %s", whereSQL), args
 	}
 
 	if f.Page <= 0 {
@@ -93,18 +139,38 @@ func (r *AdminRepo) GetLogs(ctx context.Context, f AuditFilter) ([]domain.AdminA
 	}
 	offset := (f.Page - 1) * f.Limit
 
-	var logs []domain.AdminActionLog
-	err := r.db.SelectContext(ctx, &logs,
-		`SELECT l.*, row_to_json(a.*) as admin
-		 FROM admin_actions_log l
-		 LEFT JOIN admins a ON a.id = l.admin_id
-		 ORDER BY l.created_at DESC
-		 LIMIT $1 OFFSET $2`, f.Limit, offset)
-	if err != nil {
+	query := fmt.Sprintf(`
+SELECT l.id, l.admin_id, l.action_type, l.target_type, l.target_id, l.details, l.ip_address, l.created_at,
+       a.username AS admin_username
+FROM admin_actions_log l
+LEFT JOIN admins a ON a.id = l.admin_id
+WHERE %s
+ORDER BY l.created_at DESC
+LIMIT $%d OFFSET $%d`, whereSQL, argIdx, argIdx+1)
+	args = append(args, f.Limit, offset)
+	return query, args
+}
+
+func (r *AdminRepo) GetLogs(ctx context.Context, f AuditFilter) ([]domain.AdminActionLog, int, error) {
+	countQuery, countArgs := r.buildAuditLogQuery(f, true)
+	var total int
+	if err := r.db.GetContext(ctx, &total, countQuery, countArgs...); err != nil {
 		return nil, 0, err
 	}
-	if logs == nil {
-		logs = []domain.AdminActionLog{}
+
+	listQuery, listArgs := r.buildAuditLogQuery(f, false)
+	var rows []adminActionLogRow
+	if err := r.db.SelectContext(ctx, &rows, listQuery, listArgs...); err != nil {
+		return nil, 0, err
+	}
+
+	logs := make([]domain.AdminActionLog, 0, len(rows))
+	for _, row := range rows {
+		item := row.AdminActionLog
+		if row.AdminUsername != nil && strings.TrimSpace(*row.AdminUsername) != "" {
+			item.Admin = &domain.Admin{Username: strings.TrimSpace(*row.AdminUsername)}
+		}
+		logs = append(logs, item)
 	}
 	return logs, total, nil
 }

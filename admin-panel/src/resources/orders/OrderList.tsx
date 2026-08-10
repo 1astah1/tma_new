@@ -4,20 +4,18 @@ import { Box, Chip, Paper, Typography, Button as MuiButton } from '@mui/material
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CancelIcon from '@mui/icons-material/Cancel'
-import KeyIcon from '@mui/icons-material/Key'
-import LockIcon from '@mui/icons-material/Lock'
 import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import CheckIcon from '@mui/icons-material/Check'
 import WarningIcon from '@mui/icons-material/Warning'
 
 const orderStatuses = [
-  { id: 'NEW', name: 'Новый' }, { id: 'WAITING_PAYMENT', name: 'Ожидает оплаты' },
-  { id: 'PAYMENT_VERIFICATION', name: 'Проверка платежа' }, { id: 'PAID', name: 'Оплачен' },
-  { id: 'WAITING_ACTIVATION', name: 'В очереди' }, { id: 'AWAITING_CREDENTIALS', name: 'Требуются данные' },
-  { id: 'CREDENTIALS_RECEIVED', name: 'Данные получены' }, { id: 'AWAITING_2FA', name: 'Ожидает код' },
-  { id: 'ACTIVATING', name: 'Активация...' }, { id: 'ACTIVATED', name: 'Активирован' },
-  { id: 'KEY_ISSUED', name: 'Ключ выдан' }, { id: 'COMPLETED', name: 'Завершён' },
-  { id: 'CANCELLED', name: 'Отменён' }, { id: 'REFUND_REQUESTED', name: 'Запрос возврата' },
+  { id: 'NEW', name: 'Новый' },
+  { id: 'WAITING_PAYMENT', name: 'Ожидает оплаты' },
+  { id: 'PAYMENT_VERIFICATION', name: 'Проверка платежа' },
+  { id: 'PAID', name: 'Оплачен' },
+  { id: 'COMPLETED', name: 'Завершён' },
+  { id: 'CANCELLED', name: 'Отменён' },
+  { id: 'REFUND_REQUESTED', name: 'Запрос возврата' },
   { id: 'REFUNDED', name: 'Возвращён' },
 ]
 
@@ -28,12 +26,14 @@ const paymentMethods = [
 ]
 
 const statusColors: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
-  NEW: 'info', WAITING_PAYMENT: 'default', PAYMENT_VERIFICATION: 'warning',
-  PAID: 'success', WAITING_ACTIVATION: 'info', AWAITING_CREDENTIALS: 'warning',
-  CREDENTIALS_RECEIVED: 'info', CREDENTIALS_INVALID: 'error',
-  AWAITING_2FA: 'warning', INVALID_2FA: 'error',
-  ACTIVATING: 'warning', ACTIVATED: 'success', KEY_ISSUED: 'success', COMPLETED: 'success',
-  CANCELLED: 'error', REFUND_REQUESTED: 'warning', REFUNDED: 'error',
+  NEW: 'info',
+  WAITING_PAYMENT: 'default',
+  PAYMENT_VERIFICATION: 'warning',
+  PAID: 'success',
+  COMPLETED: 'success',
+  CANCELLED: 'error',
+  REFUND_REQUESTED: 'warning',
+  REFUNDED: 'error',
 }
 
 const quickFilters = [
@@ -42,37 +42,14 @@ const quickFilters = [
   { label: 'Ожидают оплаты', value: 'WAITING_PAYMENT', icon: <AccessTimeIcon fontSize="small" />, color: 'default' },
   { label: 'Проверка', value: 'PAYMENT_VERIFICATION', icon: <WarningIcon fontSize="small" />, color: 'warning' },
   { label: 'Оплачены', value: 'PAID', icon: <CheckIcon fontSize="small" />, color: 'success' },
-  { label: 'Активация', value: 'WAITING_ACTIVATION,AWAITING_CREDENTIALS,CREDENTIALS_RECEIVED,AWAITING_2FA,ACTIVATING', icon: <LockIcon fontSize="small" />, color: 'warning' },
-  { label: 'Завершены', value: 'COMPLETED,KEY_ISSUED,ACTIVATED', icon: <CheckCircleIcon fontSize="small" />, color: 'success' },
+  { label: 'Завершены', value: 'COMPLETED', icon: <CheckCircleIcon fontSize="small" />, color: 'success' },
   { label: 'Отменены', value: 'CANCELLED,REFUNDED', icon: <CancelIcon fontSize="small" />, color: 'error' },
 ]
 
 const inlineActionsMap: Record<string, { status: string; label: string; color: string }[]> = {
-  PAYMENT_VERIFICATION: [
-    { status: 'PAID', label: '✓', color: 'success' },
-  ],
-  PAID: [
-    { status: 'KEY_ISSUED', label: '🔑', color: 'primary' },
-    { status: 'WAITING_ACTIVATION', label: 'Взять', color: 'primary' },
-  ],
-  WAITING_ACTIVATION: [
-    { status: 'AWAITING_CREDENTIALS', label: 'Данные', color: 'primary' },
-  ],
-  CREDENTIALS_RECEIVED: [
-    { status: 'AWAITING_2FA', label: '2FA', color: 'primary' },
-  ],
-  ACTIVATING: [
-    { status: 'ACTIVATED', label: '✓', color: 'success' },
-  ],
-  ACTIVATED: [
-    { status: 'COMPLETED', label: '✓', color: 'success' },
-  ],
-  KEY_ISSUED: [
-    { status: 'COMPLETED', label: '✓', color: 'success' },
-  ],
-  REFUND_REQUESTED: [
-    { status: 'REFUNDED', label: 'Возврат', color: 'warning' },
-  ],
+  PAYMENT_VERIFICATION: [{ status: 'PAID', label: '✓', color: 'success' }],
+  PAID: [{ status: 'COMPLETED', label: '✓', color: 'success' }],
+  REFUND_REQUESTED: [{ status: 'REFUNDED', label: 'Возврат', color: 'warning' }],
 }
 
 function StatusField({ record }: any) {
@@ -83,12 +60,7 @@ function StatusField({ record }: any) {
 
 function DeliveryField({ record }: any) {
   if (!record) return null
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      {record.delivery_method === 'key' ? <KeyIcon fontSize="small" sx={{ color: '#4caf50' }} /> : <LockIcon fontSize="small" sx={{ color: '#ff9800' }} />}
-      <span>{record.delivery_method === 'key' ? 'Ключ' : 'Активация'}</span>
-    </Box>
-  )
+  return <span>Через менеджера</span>
 }
 
 function AmountField({ record }: any) {
@@ -112,18 +84,21 @@ function BulkActions() {
       notify('Ничего не выбрано', { type: 'warning' })
       return
     }
-    let success = 0
-    for (const id of selectedIds) {
-      try {
-        await fetch(`/api/v1/admin/orders/${id}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ status, comment: 'Bulk action' }),
-        })
-        success++
-      } catch {}
+    try {
+      const res = await fetch('/api/v1/admin/orders/bulk-status', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: selectedIds, status, comment: 'Bulk action' }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        notify(`Обновлено: ${data.updated}/${data.total}`, { type: 'success' })
+      } else {
+        notify(data.error?.message || 'Ошибка массового обновления', { type: 'error' })
+      }
+    } catch {
+      notify('Ошибка сети', { type: 'error' })
     }
-    notify(`Обновлено: ${success}/${selectedIds.length}`, { type: success > 0 ? 'success' : 'error' })
     refresh()
   }
 
@@ -254,10 +229,6 @@ function QuickFilters({ currentFilter, onFilterChange }: { currentFilter: string
 const filters = [
   <SearchInput key="search" source="search" alwaysOn placeholder="Поиск по ID..." />,
   <SelectInput key="payment_method" source="payment_method" label="Оплата" choices={paymentMethods} />,
-  <SelectInput key="delivery_method" source="delivery_method" label="Доставка" choices={[
-    { id: 'key', name: 'Ключ' },
-    { id: 'activation', name: 'Активация' },
-  ]} />,
 ]
 
 function ClientField({ record }: any) {
@@ -319,7 +290,7 @@ function InlineActions({ record }: any) {
   )
 }
 
-function OrderListContent() {
+export function OrderListContent() {
   const { filterValues, setFilters } = useListContext()
   const currentStatus = filterValues?.status || ''
 
@@ -331,7 +302,7 @@ function OrderListContent() {
     <>
       <QuickFilters currentFilter={currentStatus} onFilterChange={handleFilterChange} />
       <BulkActions />
-      <Datagrid rowClick="show" bulkActionButtons={false} sx={{ '& .RaDatagrid-rowCell': { py: 1.5 } }}>
+      <Datagrid rowClick="show" sx={{ '& .RaDatagrid-rowCell': { py: 1.5 } }}>
         <TextField source="id" label="ID" sx={{ fontFamily: 'monospace', fontSize: '0.7rem', maxWidth: 100 }} />
         <TextField source="product.title" label="Товар" />
         <ClientField source="user" label="Клиент" />

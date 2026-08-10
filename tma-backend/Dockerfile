@@ -6,7 +6,8 @@ ENV GOTOOLCHAIN=local
 RUN go mod download
 COPY . .
 ENV GOTOOLCHAIN=local
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server && \
+    CGO_ENABLED=0 GOOS=linux go build -o catalogsync ./cmd/catalogsync
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates curl
@@ -18,6 +19,7 @@ RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/
     chmod +x /usr/local/bin/migrate
 
 COPY --from=builder /app/server .
+COPY --from=builder /app/catalogsync .
 COPY migrations ./migrations
 RUN mkdir -p /app/uploads
 

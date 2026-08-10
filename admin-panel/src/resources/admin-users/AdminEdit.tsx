@@ -1,11 +1,10 @@
 import { Edit, SimpleForm, TextInput, BooleanInput, SelectArrayInput } from 'react-admin'
 
 const roles = [
-  { id: 'super_admin', name: 'Super Admin' },
-  { id: 'game_manager', name: 'Game Manager' },
-  { id: 'activation_admin', name: 'Activation Admin' },
-  { id: 'support', name: 'Support' },
-  { id: 'finance', name: 'Finance' },
+  { id: 'super_admin', name: 'Супер-админ' },
+  { id: 'game_manager', name: 'Каталог и контент' },
+  { id: 'support', name: 'Поддержка' },
+  { id: 'finance', name: 'Финансы' },
 ]
 
 export const AdminEdit = () => (

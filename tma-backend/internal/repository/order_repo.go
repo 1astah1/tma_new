@@ -351,6 +351,40 @@ func (r *OrderRepo) GetExpiredWaitingPayment(ctx context.Context, timeout time.D
 	return orders, nil
 }
 
+func (r *OrderRepo) GetWaitingPaymentOlderThan(ctx context.Context, minAge, maxAge time.Duration) ([]domain.Order, error) {
+	var orders []domain.Order
+	err := r.db.SelectContext(ctx, &orders,
+		`SELECT o.* FROM orders o
+		 WHERE o.status = 'WAITING_PAYMENT'
+		 AND o.created_at < NOW() - $1::interval
+		 AND o.created_at >= NOW() - $2::interval`, minAge.String(), maxAge.String())
+	if err != nil {
+		return nil, err
+	}
+	if orders == nil {
+		orders = []domain.Order{}
+	}
+	return orders, nil
+}
+
+type topProductRow struct {
+	ProductID string  `db:"product_id"`
+	Title     string  `db:"title"`
+	Platform  string  `db:"platform"`
+	Orders    int     `db:"orders_count"`
+	Revenue   float64 `db:"revenue"`
+}
+
+func (r *OrderRepo) FindByIDPrefix(ctx context.Context, prefix string) (*domain.Order, error) {
+	var order domain.Order
+	err := r.db.GetContext(ctx, &order,
+		`SELECT * FROM orders WHERE id::text LIKE $1 || '%' ORDER BY created_at DESC LIMIT 1`, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return &order, nil
+}
+
 func (r *OrderRepo) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
 	stats := map[string]interface{}{}
 
@@ -406,15 +440,10 @@ func (r *OrderRepo) GetDashboardStats(ctx context.Context) (map[string]interface
 		"SELECT COUNT(*) FROM orders WHERE status = 'PAYMENT_VERIFICATION'")
 	stats["pending_orders"] = pendingOrders
 
-	var availableKeys int
-	r.db.GetContext(ctx, &availableKeys,
-		"SELECT COUNT(*) FROM product_keys WHERE status = 'available'")
-	stats["available_keys"] = availableKeys
-
-	var soldKeys int
-	r.db.GetContext(ctx, &soldKeys,
-		"SELECT COUNT(*) FROM product_keys WHERE status = 'sold'")
-	stats["sold_keys"] = soldKeys
+	var paidOrders int
+	r.db.GetContext(ctx, &paidOrders,
+		"SELECT COUNT(*) FROM orders WHERE status = 'PAID'")
+	stats["paid_orders"] = paidOrders
 
 	var totalUsers int
 	r.db.GetContext(ctx, &totalUsers, "SELECT COUNT(*) FROM users")
@@ -439,6 +468,7 @@ func (r *OrderRepo) GetDashboardStats(ctx context.Context) (map[string]interface
 	r.db.GetContext(ctx, &totalOrdersForConversion, "SELECT COUNT(*) FROM orders")
 	var completedOrders int
 	r.db.GetContext(ctx, &completedOrders, "SELECT COUNT(*) FROM orders WHERE status IN ('COMPLETED','KEY_ISSUED','ACTIVATED')")
+	stats["completed_orders"] = completedOrders
 	if totalOrdersForConversion > 0 {
 		conversionRate = float64(completedOrders) / float64(totalOrdersForConversion) * 100
 	}
@@ -450,6 +480,40 @@ func (r *OrderRepo) GetDashboardStats(ctx context.Context) (map[string]interface
 		 FROM orders o LEFT JOIN products p ON o.product_id = p.id
 		 ORDER BY o.created_at DESC LIMIT 10`)
 	stats["recent_orders"] = recentOrders
+
+	var topProducts []topProductRow
+	r.db.SelectContext(ctx, &topProducts,
+		`SELECT p.id::text as product_id, p.title, p.platform::text as platform,
+		        COUNT(o.id) as orders_count,
+		        COALESCE(SUM(COALESCE(o.payment_amount, p.price * o.quantity)), 0) as revenue
+		 FROM orders o
+		 JOIN products p ON o.product_id = p.id
+		 WHERE o.status IN ('COMPLETED','KEY_ISSUED','ACTIVATED')
+		 GROUP BY p.id, p.title, p.platform
+		 ORDER BY revenue DESC
+		 LIMIT 10`)
+	stats["top_products"] = topProducts
+
+	type platformRow struct {
+		Platform string  `db:"platform"`
+		Orders   int     `db:"orders_count"`
+		Revenue  float64 `db:"revenue"`
+	}
+	var platformStats []platformRow
+	r.db.SelectContext(ctx, &platformStats,
+		`SELECT p.platform::text as platform,
+		        COUNT(o.id) as orders_count,
+		        COALESCE(SUM(COALESCE(o.payment_amount, p.price * o.quantity)), 0) as revenue
+		 FROM orders o
+		 JOIN products p ON o.product_id = p.id
+		 WHERE o.status IN ('COMPLETED','KEY_ISSUED','ACTIVATED')
+		 GROUP BY p.platform
+		 ORDER BY revenue DESC`)
+	stats["platform_stats"] = platformStats
+
+	var promoUsage int
+	r.db.GetContext(ctx, &promoUsage, "SELECT COALESCE(SUM(used_count), 0) FROM promo_codes")
+	stats["promo_usage_total"] = promoUsage
 
 	return stats, nil
 }

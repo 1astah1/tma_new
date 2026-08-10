@@ -1,5 +1,44 @@
-import { Show, SimpleShowLayout, TextField, NumberField, SelectField, ChipField, DateField, EditButton } from 'react-admin'
-import { Box, Typography } from '@mui/material'
+import { Show, SimpleShowLayout, TextField, NumberField, SelectField, ChipField, DateField, EditButton, useRecordContext } from 'react-admin'
+import { Box, Typography, Chip, Stack } from '@mui/material'
+import { ProductImportPanel } from '../../components/ProductImportPanel'
+import { parseProductPrices } from '../../utils/productPrices'
+
+function RegionalPricesShow() {
+  const record = useRecordContext()
+  if (!record || record.type !== 'game') return null
+  const prices = parseProductPrices(record.prices)
+  const isPS = record.platform === 'ps4' || record.platform === 'ps5'
+  const isXbox = record.platform === 'xbox'
+  if (!isPS && !isXbox) return null
+  if (prices.edition_catalog) return null
+
+  const items: { label: string; value?: number }[] = []
+  if (isPS) {
+    items.push({ label: 'Турция 🇹🇷', value: prices.tr })
+    items.push({ label: 'Украина 🇺🇦', value: prices.ua })
+  }
+  if (isXbox) {
+    items.push({ label: 'США 🇺🇸', value: prices.xbox ?? prices.us })
+  }
+
+  if (!items.some((i) => i.value != null)) return null
+
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography variant="subtitle2" color="text.secondary" gutterBottom>Цены по регионам</Typography>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        {items.map((item) => (
+          <Chip
+            key={item.label}
+            label={item.value != null ? `${item.label}: ${Math.round(item.value)} ₽` : `${item.label}: —`}
+            size="small"
+            variant="outlined"
+          />
+        ))}
+      </Stack>
+    </Box>
+  )
+}
 
 function VariantsField({ record }: any) {
   if (!record) return null
@@ -25,6 +64,7 @@ function VariantsField({ record }: any) {
 export const ProductShow = () => (
   <Show actions={<EditButton />}>
     <SimpleShowLayout>
+      <ProductImportPanel />
       <TextField source="id" label="ID" />
       <TextField source="title" label="Название" />
       <TextField source="description" label="Описание" />
@@ -32,7 +72,8 @@ export const ProductShow = () => (
       <SelectField source="type" label="Тип" choices={[
         { id: 'game', name: 'Игра' }, { id: 'currency', name: 'Валюта' }, { id: 'subscription', name: 'Подписка' },
       ]} />
-      <NumberField source="price" label="Цена" options={{ style: 'currency', currency: 'RUB' }} />
+      <NumberField source="price" label="Базовая цена" options={{ style: 'currency', currency: 'RUB' }} />
+      <RegionalPricesShow />
       <NumberField source="discount_percent" label="Скидка %" />
       <ChipField source="delivery_methods" label="Способы доставки" />
       <ChipField source="status" label="Статус" />

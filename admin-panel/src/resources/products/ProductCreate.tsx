@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Create, SimpleForm, TextInput, SelectInput, NumberInput, CheckboxGroupInput, ArrayInput, SimpleFormIterator, useCreate, useNotify, useRedirect, FormDataConsumer } from 'react-admin'
+import { Create, SimpleForm, TextInput, SelectInput, NumberInput, ArrayInput, SimpleFormIterator, useCreate, useNotify, useRedirect, FormDataConsumer } from 'react-admin'
 import { Box, Typography, Divider } from '@mui/material'
 import { ImageUpload } from '../../components/ImageUpload'
+import { GameSectionInput, parseGameSection } from '../../components/GameSectionInput'
 
 export const ProductCreate = () => {
   const [create] = useCreate()
@@ -33,7 +34,8 @@ export const ProductCreate = () => {
       await create('products', {
         data: {
           ...data,
-          delivery_methods: data.delivery_methods || ['key'],
+          game_section: data.type === 'game' ? parseGameSection(data.game_section) : '',
+          delivery_methods: ['activation'],
           discount_percent: Number(data.discount_percent) || 0,
           variants,
         },
@@ -60,7 +62,7 @@ export const ProductCreate = () => {
         <Box sx={{ mb: 2 }}>
           <Typography variant="h6" gutterBottom>Параметры</Typography>
           <SelectInput source="platform" label="Платформа" choices={[
-            { id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'xbox', name: 'Xbox' },
+            { id: 'ps4', name: 'PS4' }, { id: 'ps5', name: 'PS5' }, { id: 'xbox', name: 'Xbox' }, { id: 'pc', name: 'PC' },
           ]} required fullWidth />
           <SelectInput
             source="type"
@@ -74,6 +76,7 @@ export const ProductCreate = () => {
             fullWidth
             onChange={(e: any) => setProductType(e.target.value)}
           />
+          {productType === 'game' ? <GameSectionInput /> : null}
         </Box>
 
         <Divider sx={{ my: 2 }} />
@@ -107,9 +110,9 @@ export const ProductCreate = () => {
 
         <Box sx={{ mb: 2 }}>
           <Typography variant="h6" gutterBottom>Доставка и статус</Typography>
-          <CheckboxGroupInput source="delivery_methods" label="Способы доставки" choices={[
-            { id: 'key', name: '🔑 Ключ' }, { id: 'activation', name: '🔐 Активация' },
-          ]} defaultValue={['key']} required />
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Продажа только через чат с менеджером
+          </Typography>
           <SelectInput source="status" label="Статус" choices={[
             { id: 'active', name: '✅ Активен' }, { id: 'inactive', name: '❌ Неактивен' },
           ]} defaultValue="active" required />

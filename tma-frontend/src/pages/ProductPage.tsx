@@ -1,124 +1,346 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useProduct } from '../hooks/useProducts'
 import { useCreateOrder } from '../hooks/useOrders'
 import { useToast } from '../components/ui/Toast'
 import { useCart } from '../stores/cartStore'
+import { useGoBack } from '../hooks/useGoBack'
 import { Header } from '../components/layout/Header'
 import { Button, Loader } from '../components/ui/Button'
-import { formatPrice } from '../utils/format'
+import { EditionPricingPanel } from '../components/product/EditionPricingPanel'
+import { formatPrice, formatPriceOrManager } from '../utils/format'
+import { openManagerOrderChat } from '../utils/managerChat'
+import { formatReleaseDate, isPreorderProduct } from '../utils/productPreorder'
+import {
+  EditionPlatformKey,
+  defaultEditionPlatform,
+  editionRegionLabel,
+  findEdition,
+  getEditionCatalog,
+  listEditionPlatforms,
+  resolveEditionCatalogForProduct,
+  shouldShowFullEditionCatalog,
+} from '../utils/productEditionPricing'
+import { getProductDisplayTitle, getUnifiedProductTitle } from '../utils/productDisplayTitle'
 import { platformLabels, typeLabels, platformColors, ProductVariant } from '../types/product'
+
+const CHAT_DELIVERY = 'activation' as const
+
+function isPlayStationPlatform(platform: string) {
+  return platform === 'ps4' || platform === 'ps5'
+}
+
+function getXboxUsPrice(prices?: { xbox?: number; us?: number }) {
+  if (!prices) return null
+  return prices.xbox ?? prices.us ?? null
+}
 
 export function ProductPage() {
   const { id } = useParams<{ id: string }>()
   const nav = useNavigate()
+  const goBack = useGoBack('/catalog')
   const toast = useToast()
   const { data: product, isLoading } = useProduct(id!)
   const createOrder = useCreateOrder()
   const { addItem, getItemCount } = useCart()
-  const [deliveryMethod, setDeliveryMethod] = useState<'key' | 'activation'>('key')
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
+  const [imageRatio, setImageRatio] = useState<number | null>(null)
+  const [selectedRegion, setSelectedRegion] = useState<'tr' | 'ua'>('tr')
+  const [editionPlatform, setEditionPlatform] = useState<EditionPlatformKey>('ps_tr')
+  const [selectedEditionId, setSelectedEditionId] = useState<string | null>(null)
+
+  const rawEditionCatalog = product
+    ? getEditionCatalog(product.id, product.prices, product.title_key, product.platform)
+    : null
+  const editionCatalog = rawEditionCatalog && product
+    ? resolveEditionCatalogForProduct(rawEditionCatalog, product)
+    : null
+  const editionPlatforms = editionCatalog ? listEditionPlatforms(editionCatalog) : []
+  const isMultiPlatformCatalog = product
+    ? shouldShowFullEditionCatalog(product, rawEditionCatalog)
+    : false
+
+  useEffect(() => {
+    if (!editionCatalog || !editionPlatforms.length) return
+    const preferred = defaultEditionPlatform(product!, editionPlatforms)
+    if (preferred && !editionPlatforms.includes(editionPlatform)) {
+      setEditionPlatform(preferred)
+    }
+    const activePlatform = editionPlatforms.includes(editionPlatform)
+      ? editionPlatform
+      : preferred ?? editionPlatforms[0]
+    const editions = editionCatalog[activePlatform] ?? []
+    if (!selectedEditionId && editions[0]) {
+      setSelectedEditionId(editions[0].id)
+    }
+  }, [editionCatalog, editionPlatform, editionPlatforms, product, selectedEditionId])
+
+  const selectedEdition = useMemo(() => {
+    if (!editionCatalog || !selectedEditionId) return null
+    return findEdition(editionCatalog, editionPlatform, selectedEditionId)
+  }, [editionCatalog, editionPlatform, selectedEditionId])
+
+  const preorder = product ? isPreorderProduct(product) : false
+  const hasDiscount = product ? !preorder && product.discount_percent > 0 : false
+  const basePrice = product ? (hasDiscount ? product.price * (1 - product.discount_percent / 100) : product.price) : 0
+  const variantPrice = selectedVariant ? selectedVariant.price : 0
+  const gamePrice = selectedEdition?.price ?? basePrice
+  const totalPrice = editionCatalog && selectedEdition
+    ? selectedEdition.price
+    : product?.type === 'currency' || product?.type === 'subscription'
+      ? (variantPrice || basePrice) * quantity
+      : gamePrice
+  const variants: ProductVariant[] = product && Array.isArray(product.variants) ? product.variants : []
+  const hasVariants = !!product && variants.length > 0 && (product.type === 'currency' || product.type === 'subscription')
+  const isPlayStation = product ? isPlayStationPlatform(product.platform) : false
+  const isXbox = product?.platform === 'xbox'
+  const xboxUsPrice = product ? getXboxUsPrice(product.prices) : null
+
+  useEffect(() => {
+    setSelectedVariant(null)
+    setQuantity(1)
+    setSelectedEditionId(null)
+    setEditionPlatform('ps_tr')
+    setImageRatio(null)
+  }, [id])
 
   const handleAddToCart = () => {
     if (!product) return
+    if (editionCatalog && !selectedEdition) {
+      toast.toast('Выберите издание', 'error')
+      return
+    }
     addItem({
       productId: product.id,
       variantId: selectedVariant?.id,
       quantity: (product.type === 'currency' || product.type === 'subscription') ? quantity : 1,
-      title: product.title,
-      price: selectedVariant ? selectedVariant.price : (hasDiscount ? product.price * (1 - product.discount_percent / 100) : product.price),
+      title: selectedEdition
+        ? `${getProductDisplayTitle(product)} — ${selectedEdition.name} (${editionRegionLabel(editionPlatform)})`
+        : getProductDisplayTitle(product),
+      price: selectedEdition?.price ?? (selectedVariant ? selectedVariant.price : basePrice),
       image: product.image_url || undefined,
-      deliveryMethod,
+      deliveryMethod: CHAT_DELIVERY,
     })
     toast.toast(`Добавлено в корзину (${getItemCount()})`, 'success')
   }
 
-  const hasDiscount = product ? product.discount_percent > 0 : false
-  const basePrice = product ? (hasDiscount ? product.price * (1 - product.discount_percent / 100) : product.price) : 0
-  const variantPrice = selectedVariant ? selectedVariant.price : 0
-  const totalPrice = product?.type === 'currency' || product?.type === 'subscription'
-    ? (variantPrice || basePrice) * quantity
-    : basePrice
-
   const handleBuy = async () => {
     if (!product) return
+    if (hasVariants && !selectedVariant) {
+      toast.toast('Выберите вариант товара', 'error')
+      return
+    }
+    if (editionCatalog && !selectedEdition) {
+      toast.toast('Выберите издание', 'error')
+      return
+    }
+
+    const qty = (product.type === 'currency' || product.type === 'subscription') ? quantity : 1
+    const variantId = selectedVariant?.id
+      ?? (selectedEdition ? `${editionPlatform}:${selectedEdition.id}` : undefined)
+
     try {
       const order = await createOrder.mutateAsync({
         productId: product.id,
-        deliveryMethod,
-        variantId: selectedVariant?.id,
-        quantity: (product.type === 'currency' || product.type === 'subscription') ? quantity : 1,
+        variantId,
+        quantity: qty,
       })
-      nav(`/order/${order.id}`)
+      nav(`/orders/${order.id}`)
+      openManagerOrderChat(order.id)
     } catch {
-      toast.toast('Ошибка при создании заказа', 'error')
+      toast.toast('Не удалось создать заказ. Попробуйте ещё раз.', 'error')
     }
   }
 
   if (isLoading) return <div className="flex justify-center py-20"><Loader /></div>
   if (!product) return <div className="p-4 text-center text-[var(--tg-hint)]">Товар не найден</div>
 
-  const variants: ProductVariant[] = Array.isArray(product.variants) ? product.variants : []
-  const hasVariants = variants.length > 0 && (product.type === 'currency' || product.type === 'subscription')
-  const isKeyDelivery = deliveryMethod === 'key'
-  const noKeys = isKeyDelivery && (product as any).available_keys === 0
+  const displayTitle = product ? getUnifiedProductTitle(product, isMultiPlatformCatalog) : ''
+
+  const mediaAspectRatio = imageRatio ? `${imageRatio}` : '0.75'
 
   return (
-    <div className="pb-24">
-      <Header title="" onBack={() => nav(-1)} />
-      <div className="p-4">
-        <div className="aspect-video bg-gradient-to-br from-[var(--tg-button)]/20 to-[var(--tg-secondary)] rounded-xl mb-4 flex items-center justify-center text-6xl overflow-hidden relative">
+    <div className="pb-page-bar">
+      <Header title="" onBack={goBack} />
+      <div className="space-y-4 p-4">
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0c0c0c] shadow-[0_18px_45px_rgba(0,0,0,0.35)]" style={{ aspectRatio: mediaAspectRatio }}>
           {product.image_url ? (
-            <img src={product.image_url} alt={product.title} className="w-full h-full object-cover" />
+            <>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(201,168,76,0.32),transparent_42%),linear-gradient(180deg,rgba(255,255,255,0.05),rgba(0,0,0,0.18))]" />
+              <img
+                src={product.image_url}
+                alt={displayTitle}
+                onLoad={(event) => {
+                  const img = event.currentTarget
+                  const ratio = img.naturalWidth / Math.max(img.naturalHeight, 1)
+                  setImageRatio(Math.min(Math.max(ratio, 0.58), 1.85))
+                }}
+                className="relative z-10 h-full w-full object-contain"
+              />
+            </>
           ) : (
-            product.type === 'game' ? '🎮' : product.type === 'currency' ? '💰' : '📦'
+            <div className="flex h-full items-center justify-center text-6xl">
+              {product.type === 'game' ? '🎮' : product.type === 'currency' ? '💰' : '📦'}
+            </div>
           )}
-          {hasDiscount && (
-            <span className="absolute top-3 left-3 bg-red-500 text-white text-sm font-bold px-3 py-1 rounded-lg shadow-lg">
+          {hasDiscount && !editionCatalog ? (
+            <span className="absolute left-3 top-3 z-20 rounded-full bg-red-500 px-3 py-1 text-sm font-black text-white shadow-lg">
               -{product.discount_percent}%
             </span>
-          )}
+          ) : null}
         </div>
 
-        <h1 className="text-xl font-bold mb-2">{product.title}</h1>
+        <div className="rounded-3xl border border-white/10 bg-[#161616] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.24)]">
+          <div className="mb-3">
+            <span className="rounded-md bg-white/7 px-2 py-1 text-xs font-medium text-white/55">
+              {typeLabels[product.type]}
+            </span>
+          </div>
 
-        <div className="flex gap-2 mb-3">
-          <span className={`text-sm px-2 py-0.5 rounded ${platformColors[product.platform]}`}>
-            {platformLabels[product.platform]}
-          </span>
-          <span className="text-sm px-2 py-0.5 rounded bg-[var(--tg-secondary)] text-[var(--tg-hint)]">
-            {typeLabels[product.type]}
-          </span>
+          <h1 className="mb-2 break-words text-xl font-black leading-tight tracking-[-0.02em] text-white sm:text-2xl">
+            {displayTitle}
+          </h1>
+
+          {preorder ? (
+            <div className="mb-4 space-y-1">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-sky-300">Предзаказ</div>
+              <div className="text-sm font-medium text-sky-100/90">{formatReleaseDate(product.release_date)}</div>
+            </div>
+          ) : null}
+
+          {editionCatalog && editionPlatforms.length > 0 ? (
+            <>
+              {!isMultiPlatformCatalog ? (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className={`rounded-md px-2 py-1 text-xs font-bold ${platformColors[product.platform]}`}>
+                    {platformLabels[product.platform]}
+                  </span>
+                </div>
+              ) : null}
+              <EditionPricingPanel
+              catalog={editionCatalog}
+              platform={editionPlatform}
+              editionId={selectedEditionId}
+              onPlatformChange={(nextPlatform) => {
+                setEditionPlatform(nextPlatform)
+                const first = editionCatalog[nextPlatform]?.[0]
+                setSelectedEditionId(first?.id ?? null)
+              }}
+              onEditionChange={(edition) => setSelectedEditionId(edition.id)}
+            />
+            </>
+          ) : (
+            <>
+              {!editionCatalog ? (
+                <div className="mb-3 flex items-center gap-2">
+                  <span className={`rounded-md px-2 py-1 text-xs font-bold ${platformColors[product.platform]}`}>
+                    {platformLabels[product.platform]}
+                  </span>
+                </div>
+              ) : null}
+
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  {product.prices && Object.keys(product.prices).length > 0 ? (
+                    <div className="space-y-2">
+                      {isPlayStation ? (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setSelectedRegion('tr')}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-colors ${
+                                selectedRegion === 'tr'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
+                              }`}
+                            >
+                              🇹🇷 TR
+                            </button>
+                            <button
+                              onClick={() => setSelectedRegion('ua')}
+                              className={`rounded-lg px-2.5 py-1 text-xs font-bold transition-colors ${
+                                selectedRegion === 'ua'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
+                              }`}
+                            >
+                              🇺🇦 UA
+                            </button>
+                          </div>
+                          {selectedRegion === 'tr' && product.prices.tr != null && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-xs font-medium text-white/45">Турция</span>
+                              <span className="text-2xl font-black leading-none text-amber-200">
+                                {formatPriceOrManager(product.prices.tr)}
+                              </span>
+                            </div>
+                          )}
+                          {selectedRegion === 'ua' && product.prices.ua != null && (
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-xs font-medium text-white/45">Украина</span>
+                              <span className="text-2xl font-black leading-none text-amber-200">
+                                {formatPriceOrManager(product.prices.ua)}
+                              </span>
+                            </div>
+                          )}
+                          {selectedRegion === 'ua' && product.prices.ua == null && (
+                            <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                              <span className="text-sm font-bold text-amber-300">🇺🇦 UA</span>
+                              <span className="text-xs text-amber-200/70">Цену на этот регион можно узнать у менеджера</span>
+                            </div>
+                          )}
+                        </>
+                      ) : isXbox && xboxUsPrice != null ? (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-xs font-medium text-white/45">🇺🇸 US</span>
+                          <span className="text-2xl font-black leading-none text-amber-200">
+                            {formatPriceOrManager(xboxUsPrice)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-black leading-none text-amber-200">
+                          {formatPriceOrManager(basePrice)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-2xl font-black leading-none text-amber-200">
+                      {formatPriceOrManager(basePrice)}
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-2xl bg-white/7 px-3 py-2 text-right text-xs font-medium text-white/55">
+                  Через менеджера
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {product.description && (
-          <p className="text-sm text-[var(--tg-hint)] mb-4">{product.description}</p>
+          <div className="rounded-3xl border border-white/10 bg-[#161616]/80 p-4">
+            <div className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-white/35">Описание</div>
+            <p className="text-sm leading-relaxed text-white/62">{product.description}</p>
+          </div>
         )}
 
-        <div className="mb-6">
-          {hasDiscount && (
-            <span className="text-lg text-[var(--tg-hint)] line-through mr-2">{formatPrice(product.price)}</span>
-          )}
-          <span className="text-3xl font-bold text-[var(--tg-button)]">{formatPrice(basePrice)}</span>
-        </div>
-
         {hasVariants && (
-          <div className="mb-6">
-            <label className="text-sm font-medium mb-2 block">Выберите количество</label>
-            <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-3xl border border-white/10 bg-[#161616]/80 p-4">
+            <label className="mb-3 block text-sm font-bold text-white">Выберите вариант</label>
+            <div className="grid grid-cols-2 gap-2">
               {variants.map((v) => (
                 <button
                   key={v.id}
                   onClick={() => { setSelectedVariant(v); setQuantity(1) }}
-                  className={`p-3 rounded-xl border-2 text-center transition ${
+                  className={`rounded-2xl border p-3 text-left transition ${
                     selectedVariant?.id === v.id
-                      ? 'border-[var(--tg-button)] bg-[var(--tg-button)]/10'
-                      : 'border-[var(--tg-border)] hover:border-[var(--tg-hint)]'
+                      ? 'border-amber-400 bg-amber-500/14'
+                      : 'border-white/10 bg-black/12 hover:border-white/20'
                   }`}
                 >
-                  <div className="font-medium text-sm">{v.name}</div>
-                  <div className="text-xs text-[var(--tg-hint)]">{formatPrice(v.price)}</div>
+                  <div className="font-bold text-sm text-white">{v.name}</div>
+                  <div className="mt-1 text-xs text-white/45">{formatPriceOrManager(v.price)}</div>
                 </button>
               ))}
             </div>
@@ -126,19 +348,19 @@ export function ProductPage() {
         )}
 
         {(product.type === 'currency' || product.type === 'subscription') && (selectedVariant || !hasVariants) && (
-          <div className="mb-6">
-            <label className="text-sm font-medium mb-2 block">Количество</label>
+          <div className="rounded-3xl border border-white/10 bg-[#161616]/80 p-4">
+            <label className="mb-3 block text-sm font-bold text-white">Количество</label>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                className="w-10 h-10 rounded-lg bg-[var(--tg-secondary)] flex items-center justify-center text-xl font-bold hover:bg-[var(--tg-card)]"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/8 text-xl font-bold hover:bg-white/12"
               >
                 −
               </button>
-              <span className="text-xl font-bold w-12 text-center">{quantity}</span>
+              <span className="w-12 text-center text-xl font-black text-white">{quantity}</span>
               <button
                 onClick={() => setQuantity(quantity + 1)}
-                className="w-10 h-10 rounded-lg bg-[var(--tg-secondary)] flex items-center justify-center text-xl font-bold hover:bg-[var(--tg-card)]"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/8 text-xl font-bold hover:bg-white/12"
               >
                 +
               </button>
@@ -147,79 +369,37 @@ export function ProductPage() {
         )}
 
         {(product.type === 'currency' || product.type === 'subscription') && (
-          <div className="mb-6 p-4 bg-[var(--tg-secondary)] rounded-xl">
-            <div className="flex justify-between text-sm mb-1">
-              <span className="text-[var(--tg-hint)]">Цена за единицу</span>
-              <span>{formatPrice(selectedVariant ? selectedVariant.price : basePrice)}</span>
+          <div className="rounded-3xl border border-white/10 bg-[#161616]/80 p-4">
+            <div className="mb-1 flex justify-between text-sm">
+              <span className="text-white/45">Цена за единицу</span>
+              <span>{formatPriceOrManager(selectedVariant ? selectedVariant.price : basePrice)}</span>
             </div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-[var(--tg-hint)]">Количество</span>
+            <div className="mb-2 flex justify-between text-sm">
+              <span className="text-white/45">Количество</span>
               <span>× {quantity}</span>
             </div>
-            <div className="border-t border-[var(--tg-border)] pt-2 flex justify-between font-bold text-lg">
+            <div className="flex justify-between border-t border-white/10 pt-2 text-lg font-black">
               <span>Итого</span>
-              <span className="text-[var(--tg-button)]">{formatPrice(totalPrice)}</span>
+              <span className="text-amber-200">{formatPriceOrManager(totalPrice)}</span>
             </div>
           </div>
         )}
 
-        {noKeys && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-center">
-            <p className="text-sm text-red-400 font-medium">⚠ Ключи закончились. Ожидайте пополнения.</p>
-          </div>
-        )}
-
-        <div className="space-y-3 mb-6">
-          <label className="text-sm font-medium">Способ получения</label>
-          {product.delivery_methods.includes('key') && (
-            <label
-              className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer ${
-                deliveryMethod === 'key' ? 'border-[var(--tg-button)] bg-[var(--tg-button)]/5' : 'border-[var(--tg-border)]'
-              }`}
-              onClick={() => setDeliveryMethod('key')}
-            >
-              <input type="radio" checked={deliveryMethod === 'key'} readOnly className="accent-[var(--tg-button)]" />
-              <div>
-                <div className="font-medium">🔑 Ключ</div>
-                <div className="text-xs text-[var(--tg-hint)]">Получите код активации сразу</div>
-              </div>
-            </label>
-          )}
-          {product.delivery_methods.includes('activation') && (
-            <label
-              className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer ${
-                deliveryMethod === 'activation' ? 'border-[var(--tg-button)] bg-[var(--tg-button)]/5' : 'border-[var(--tg-border)]'
-              }`}
-              onClick={() => setDeliveryMethod('activation')}
-            >
-              <input type="radio" checked={deliveryMethod === 'activation'} readOnly className="accent-[var(--tg-button)]" />
-              <div>
-                <div className="font-medium">🔐 Активация на аккаунт</div>
-                <div className="text-xs text-[var(--tg-hint)]">Активируем на ваш аккаунт</div>
-              </div>
-            </label>
-          )}
+        <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-white/70">
+          Оформление и выдача — только через чат с менеджером в Telegram.
         </div>
 
-        <div className="flex gap-2 mb-6">
-          <Button
-            size="lg"
-            onClick={handleAddToCart}
-            className="flex-1"
-            variant="secondary"
-            disabled={noKeys}
-          >
-            {noKeys ? 'Нет в наличии' : 'В корзину'}
+        <div className="sticky bottom-above-nav z-40 -mx-1 flex flex-col gap-2 rounded-3xl border border-white/10 bg-[#111111]/92 p-2 shadow-[0_-12px_35px_rgba(0,0,0,0.32)] backdrop-blur-xl sm:flex-row">
+          <Button size="md" onClick={handleAddToCart} className="w-full min-w-0 flex-1 text-sm sm:text-base" variant="secondary">
+            В корзину
           </Button>
           <Button
-            fullWidth
-            size="lg"
+            size="md"
             onClick={handleBuy}
             loading={createOrder.isPending}
-            className="flex-1"
-            disabled={noKeys}
+            className="w-full min-w-0 flex-1 text-sm sm:text-base"
           >
-            {noKeys ? 'Нет в наличии' : `Купить за ${formatPrice(totalPrice)}`}
+            {preorder ? 'ПРЕДЗАКАЗ' : 'Оформить с менеджером'}
           </Button>
         </div>
       </div>

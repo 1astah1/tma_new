@@ -1,27 +1,43 @@
 import api from './api'
 import { Order } from '../types/order'
 
-export async function createOrder(productId: string, deliveryMethod: 'key' | 'activation', variantId?: string, quantity = 1) {
+export async function createOrder(productId: string, variantId?: string, quantity = 1) {
   const { data } = await api.post('/orders', {
     product_id: productId,
-    delivery_method: deliveryMethod,
+    delivery_method: 'activation',
     variant_id: variantId,
     quantity,
   })
   return data as Order
 }
 
-export async function createBatchOrder(items: { product_id: string; delivery_method: 'key' | 'activation'; variant_id?: string; quantity: number }[]) {
-  const { data } = await api.post('/orders/batch', { items })
+export async function createBatchOrder(
+  items: { product_id: string; delivery_method: 'activation'; variant_id?: string; quantity: number }[],
+  promoCode?: string,
+) {
+  const { data } = await api.post('/orders/batch', {
+    items,
+    promo_code: promoCode || undefined,
+  })
   return data as { orders: Order[]; total_amount: number; order_ids: string[] }
 }
 
-export async function confirmBatchPayment(orderIds: string[], paymentMethod: string, file: File) {
+export async function uploadOrderReceipt(orderId: string, paymentMethod: string, file: File) {
   const form = new FormData()
-  form.append('order_ids', JSON.stringify(orderIds))
   form.append('payment_method', paymentMethod)
   form.append('receipt', file)
-  const { data } = await api.post('/orders/batch/confirm-payment', form, {
+  const { data } = await api.post(`/orders/${orderId}/payment`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+export async function uploadBatchReceipt(orderIds: string[], paymentMethod: string, file: File) {
+  const form = new FormData()
+  form.append('payment_method', paymentMethod)
+  form.append('order_ids', JSON.stringify(orderIds))
+  form.append('receipt', file)
+  const { data } = await api.post('/orders/batch/payment', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data
@@ -39,16 +55,6 @@ export async function getMyOrders(status?: string, page = 1, limit = 20) {
 export async function getOrder(id: string) {
   const { data } = await api.get(`/orders/${id}`)
   return data as Order & { history: any[] }
-}
-
-export async function confirmPayment(orderId: string, paymentMethod: string, file: File) {
-  const form = new FormData()
-  form.append('receipt', file)
-  form.append('payment_method', paymentMethod)
-  const { data } = await api.post(`/orders/${orderId}/confirm-payment`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
-  return data
 }
 
 export async function sendCredentials(orderId: string, platform: string, login: string, password: string) {

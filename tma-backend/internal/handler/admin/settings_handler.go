@@ -6,6 +6,7 @@ import (
 
 	"tma-backend/internal/handler"
 	"tma-backend/internal/repository"
+	"tma-backend/internal/service"
 )
 
 type SettingsHandler struct {
@@ -48,5 +49,27 @@ func (h *SettingsHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	if body.Key == service.PricingSettingsKey {
+		if cfg, err := service.ParsePricingFormulasValue(body.Value); err == nil {
+			service.ApplyPricingFormulas(cfg)
+		}
+	}
 	handler.RespondJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (h *SettingsHandler) PricingPreview(w http.ResponseWriter, r *http.Request) {
+	cfg := service.GetPricingFormulas()
+	rate := service.TRYToRUBRate()
+	if manual := service.ManualTRYToRUBRate(); manual > 0 {
+		rate = manual
+	}
+	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"formulas": cfg,
+		"try_rub_rate": rate,
+		"examples": map[string]float64{
+			"turkey_500_try":  service.TurkeyNominalPrice(500),
+			"ukraine_1000_uah": service.UkrainePrice(1000),
+			"xbox_10_usd":     service.XboxUSAPrice(10),
+		},
+	})
 }

@@ -8,7 +8,7 @@ export interface CartItem {
   title: string
   price: number
   image?: string
-  deliveryMethod: 'key' | 'activation'
+  deliveryMethod: 'activation'
 }
 
 interface CartStore {

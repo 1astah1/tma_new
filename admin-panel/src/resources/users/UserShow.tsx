@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Show, useRecordContext, List, Datagrid, TextField, DateField, SelectField } from 'react-admin'
-import { Card, CardContent, Typography, Box, Chip, Grid, Button, TextField as MuiTextField, CircularProgress } from '@mui/material'
+import { Show, useRecordContext } from 'react-admin'
+import { Link } from 'react-router-dom'
+import {
+  Card, CardContent, Typography, Box, Chip, Grid, Button,
+  TextField as MuiTextField, CircularProgress, Table, TableBody, TableCell, TableHead, TableRow,
+} from '@mui/material'
 import PersonIcon from '@mui/icons-material/Person'
 import BlockIcon from '@mui/icons-material/Block'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
@@ -25,6 +29,11 @@ const statusLabels: Record<string, string> = {
   CANCELLED: 'Отменён', REFUND_REQUESTED: 'Запрос возврата', REFUNDED: 'Возвращён',
 }
 
+function formatOrderAmount(value?: number | null) {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value)
+}
+
 function UserOrders({ userId }: { userId: string }) {
   const [orders, setOrders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,27 +42,55 @@ function UserOrders({ userId }: { userId: string }) {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/v1/admin/orders?limit=50`, {
+        const res = await fetch(`/api/v1/admin/orders?user_id=${userId}&limit=100`, {
           headers: { Authorization: `Bearer ${token}` },
         })
         const data = await res.json()
-        setOrders((data.data || []).filter((o: any) => o.user_id === userId))
+        setOrders(data.data || [])
       } catch {}
       setLoading(false)
     }
     load()
-  }, [userId])
+  }, [userId, token])
 
   if (loading) return <CircularProgress size={24} />
-  if (orders.length === 0) return <Typography sx={{ color: '#888' }}>Нет заказов</Typography>
+  if (orders.length === 0) {
+    return (
+      <Typography sx={{ color: '#888' }}>
+        Нет заказов. Заявки появятся после нажатия «Оформить с менеджером» в магазине.
+      </Typography>
+    )
+  }
 
   return (
-    <Datagrid rowClick="show" bulkActionButtons={false}>
-      <TextField source="id" label="ID" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }} />
-      <TextField source="product.title" label="Товар" />
-      <SelectField source="status" label="Статус" choices={Object.entries(statusLabels).map(([id, name]) => ({ id, name }))} />
-      <DateField source="created_at" label="Дата" showTime />
-    </Datagrid>
+    <Box sx={{ overflowX: 'auto' }}>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell sx={{ color: '#888' }}>ID</TableCell>
+            <TableCell sx={{ color: '#888' }}>Товар</TableCell>
+            <TableCell sx={{ color: '#888' }}>Статус</TableCell>
+            <TableCell sx={{ color: '#888' }}>Сумма</TableCell>
+            <TableCell sx={{ color: '#888' }}>Дата</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {orders.map((order) => (
+            <TableRow key={order.id} hover component={Link} to={`/orders/${order.id}/show`} sx={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <TableCell sx={{ color: '#90caf9', fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                {order.id?.substring(0, 8)}
+              </TableCell>
+              <TableCell sx={{ color: '#fff' }}>{order.product?.title || '—'}</TableCell>
+              <TableCell sx={{ color: '#fff' }}>{statusLabels[order.status] || order.status}</TableCell>
+              <TableCell sx={{ color: '#fff' }}>{formatOrderAmount(order.payment_amount)}</TableCell>
+              <TableCell sx={{ color: '#fff' }}>
+                {order.created_at ? new Date(order.created_at).toLocaleString('ru-RU') : '—'}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Box>
   )
 }
 
@@ -122,8 +159,18 @@ function UserDetail() {
                   <Typography sx={{ color: '#fff' }}>{record.first_name || '—'}</Typography>
                 </Grid>
                 <Grid item xs={6}>
+                  <Typography variant="caption" sx={{ color: '#888' }}>Последний вход в TMA</Typography>
+                  <Typography sx={{ color: '#fff' }}>
+                    {record.last_interaction
+                      ? new Date(record.last_interaction).toLocaleString('ru-RU')
+                      : '—'}
+                  </Typography>
+                </Grid>
+                <Grid item xs={6}>
                   <Typography variant="caption" sx={{ color: '#888' }}>Регистрация</Typography>
-                  <Typography sx={{ color: '#fff' }}>{record.created_at ? new Date(record.created_at).toLocaleDateString('ru-RU') : '—'}</Typography>
+                  <Typography sx={{ color: '#fff' }}>
+                    {record.created_at ? new Date(record.created_at).toLocaleString('ru-RU') : '—'}
+                  </Typography>
                 </Grid>
               </Grid>
               <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>

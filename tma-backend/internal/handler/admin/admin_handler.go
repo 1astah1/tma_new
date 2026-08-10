@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -26,10 +27,12 @@ func NewAdminUserHandler(userRepo *repository.UserRepo, adminRepo *repository.Ad
 func (h *AdminUserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	search := q.Get("search")
+	sortField := q.Get("sort")
+	sortOrder := q.Get("order")
 	page, _ := parseInt(q.Get("page"), 1)
 	limit, _ := parseInt(q.Get("limit"), 20)
 
-	users, total, err := h.userRepo.List(r.Context(), search, page, limit)
+	users, total, err := h.userRepo.List(r.Context(), search, sortField, sortOrder, page, limit)
 	if err != nil {
 		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -154,6 +157,17 @@ func (h *AdminUserHandler) GetLogs(w http.ResponseWriter, r *http.Request) {
 	f := repository.AuditFilter{}
 	f.Page, _ = parseInt(q.Get("page"), 1)
 	f.Limit, _ = parseInt(q.Get("limit"), 50)
+	if v := strings.TrimSpace(q.Get("action_type")); v != "" {
+		f.ActionType = &v
+	}
+	if v := strings.TrimSpace(q.Get("target_type")); v != "" {
+		f.TargetType = &v
+	}
+	if v := strings.TrimSpace(q.Get("admin_id")); v != "" {
+		if id, err := uuid.Parse(v); err == nil {
+			f.AdminID = &id
+		}
+	}
 
 	logs, total, err := h.adminRepo.GetLogs(r.Context(), f)
 	if err != nil {
@@ -215,7 +229,7 @@ func (h *AdminUserHandler) GetUserOrders(w http.ResponseWriter, r *http.Request)
 	page, _ := parseInt(q.Get("page"), 1)
 	limit, _ := parseInt(q.Get("limit"), 20)
 
-	orders, total, err := h.userRepo.List(r.Context(), "", page, limit)
+	orders, total, err := h.userRepo.List(r.Context(), "", "", "", page, limit)
 	if err != nil {
 		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return

@@ -17,10 +17,11 @@ import (
 type AdminProductHandler struct {
 	svc         *service.ProductService
 	productRepo *repository.ProductRepo
+	importRepo  *repository.CatalogImportRepo
 }
 
-func NewAdminProductHandler(svc *service.ProductService, productRepo *repository.ProductRepo) *AdminProductHandler {
-	return &AdminProductHandler{svc: svc, productRepo: productRepo}
+func NewAdminProductHandler(svc *service.ProductService, productRepo *repository.ProductRepo, importRepo *repository.CatalogImportRepo) *AdminProductHandler {
+	return &AdminProductHandler{svc: svc, productRepo: productRepo, importRepo: importRepo}
 }
 
 func (h *AdminProductHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -68,20 +69,12 @@ func (h *AdminProductHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	type ProductWithCounts struct {
 		domain.Product
-		AvailableKeys int `json:"available_keys"`
-		OrderCount    int `json:"order_count"`
+		OrderCount int `json:"order_count"`
 	}
 
 	result := make([]ProductWithCounts, 0, len(products))
 	for _, p := range products {
 		pwc := ProductWithCounts{Product: p}
-		for _, dm := range p.DeliveryMethods {
-			if dm == "key" {
-				cnt, _ := h.productRepo.CountAvailableKeys(r.Context(), p.ID)
-				pwc.AvailableKeys = cnt
-				break
-			}
-		}
 		pwc.OrderCount, _ = h.productRepo.CountOrders(r.Context(), p.ID)
 		result = append(result, pwc)
 	}
@@ -107,7 +100,67 @@ func (h *AdminProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Product not found")
 		return
 	}
-	handler.RespondJSON(w, http.StatusOK, p)
+	resp := map[string]interface{}{}
+	b, _ := json.Marshal(p)
+	_ = json.Unmarshal(b, &resp)
+	if h.importRepo != nil && p.Type == domain.ProductTypeGame {
+		if imp, err := h.importRepo.GetByProductID(r.Context(), id); err == nil && imp != nil {
+			resp["catalog_import"] = imp
+		}
+	}
+	handler.RespondJSON(w, http.StatusOK, resp)
+}
+
+func (h *AdminProductHandler) SyncFromImport(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid ID")
+		return
+	}
+	if h.importRepo == nil {
+		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Import repo unavailable")
+		return
+	}
+	imp, err := h.importRepo.GetByProductID(r.Context(), id)
+	if err != nil {
+		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Связанный импорт не найден")
+		return
+	}
+	product, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Product not found")
+		return
+	}
+	price := service.EffectiveCatalogPriceRUB(imp)
+	if imp.OriginalPriceRUB != nil && *imp.OriginalPriceRUB >= service.MinPaidPriceRUB() {
+		price = *imp.OriginalPriceRUB
+	}
+	if price < service.MinPaidPriceRUB() && product.GameSection != "preorder" {
+		handler.RespondError(w, http.StatusBadRequest, "INVALID_PRICE", "Цена в импорте ниже минимума")
+		return
+	}
+	product.Price = price
+	if len(imp.Prices) > 0 {
+		product.Prices = imp.Prices
+	}
+	if imp.ReleaseDate != nil {
+		product.ReleaseDate = imp.ReleaseDate
+	}
+	if imp.GameSection != "" {
+		product.GameSection = imp.GameSection
+	}
+	if imp.ImageURL != nil && *imp.ImageURL != "" {
+		product.ImageURL = imp.ImageURL
+	}
+	if err := h.svc.Update(r.Context(), product); err != nil {
+		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "synced",
+		"price":   product.Price,
+		"product": product,
+	})
 }
 
 func (h *AdminProductHandler) Create(w http.ResponseWriter, r *http.Request) {

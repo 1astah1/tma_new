@@ -86,6 +86,11 @@ func (m *MockOrderStore) GetExpiredWaitingPayment(ctx context.Context, timeout t
 	return args.Get(0).([]domain.Order), args.Error(1)
 }
 
+func (m *MockOrderStore) GetWaitingPaymentOlderThan(ctx context.Context, minAge, maxAge time.Duration) ([]domain.Order, error) {
+	args := m.Called(ctx, minAge, maxAge)
+	return args.Get(0).([]domain.Order), args.Error(1)
+}
+
 func (m *MockOrderStore) GetDashboardStats(ctx context.Context) (map[string]interface{}, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(map[string]interface{}), args.Error(1)
@@ -108,6 +113,14 @@ func (m *MockProductStore) List(ctx context.Context, f repository.ProductFilter)
 	return args.Get(0).([]domain.Product), args.Int(1), args.Error(2)
 }
 
+func (m *MockProductStore) ListActiveByTitleKey(ctx context.Context, titleKey string) ([]domain.Product, error) {
+	args := m.Called(ctx, titleKey)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]domain.Product), args.Error(1)
+}
+
 func (m *MockProductStore) Create(ctx context.Context, p *domain.Product) error {
 	args := m.Called(ctx, p)
 	return args.Error(0)
@@ -121,6 +134,16 @@ func (m *MockProductStore) Update(ctx context.Context, p *domain.Product) error 
 func (m *MockProductStore) Delete(ctx context.Context, id uuid.UUID) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
+}
+
+func (m *MockProductStore) ActivateAllGames(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return int64(args.Int(0)), args.Error(1)
+}
+
+func (m *MockProductStore) SyncMetadataFromImports(ctx context.Context, minPrice float64) (int64, error) {
+	args := m.Called(ctx, minPrice)
+	return int64(args.Int(0)), args.Error(1)
 }
 
 type MockKeyStore struct {
@@ -200,8 +223,8 @@ func (m *MockUserStore) GetByID(ctx context.Context, id uuid.UUID) (*domain.User
 	return args.Get(0).(*domain.User), args.Error(1)
 }
 
-func (m *MockUserStore) List(ctx context.Context, search string, page, limit int) ([]domain.User, int, error) {
-	args := m.Called(ctx, search, page, limit)
+func (m *MockUserStore) List(ctx context.Context, search, sortField, sortOrder string, page, limit int) ([]domain.User, int, error) {
+	args := m.Called(ctx, search, sortField, sortOrder, page, limit)
 	return args.Get(0).([]domain.User), args.Int(1), args.Error(2)
 }
 
@@ -235,6 +258,10 @@ type MockNotifier struct {
 
 func (m *MockNotifier) SendOrderStatusUpdate(ctx context.Context, order *domain.Order) {
 	m.Called(ctx, order)
+}
+
+func (m *MockNotifier) SendUserMessage(ctx context.Context, telegramID int64, text string) {
+	m.Called(ctx, telegramID, text)
 }
 
 type MockAuditor struct {

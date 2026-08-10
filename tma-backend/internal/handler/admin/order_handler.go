@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"context"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"tma-backend/internal/domain"
@@ -20,14 +18,13 @@ import (
 type OrderHandler struct {
 	svc          *service.OrderService
 	orderRepo    *repository.OrderRepo
-	keyRepo      *repository.KeyRepo
 	adminRepo    *repository.AdminRepo
 	encSvc       *service.EncryptionService
 	templateRepo *repository.TemplateRepo
 }
 
-func NewOrderHandler(svc *service.OrderService, orderRepo *repository.OrderRepo, keyRepo *repository.KeyRepo, adminRepo *repository.AdminRepo, encSvc *service.EncryptionService, templateRepo *repository.TemplateRepo) *OrderHandler {
-	return &OrderHandler{svc: svc, orderRepo: orderRepo, keyRepo: keyRepo, adminRepo: adminRepo, encSvc: encSvc, templateRepo: templateRepo}
+func NewOrderHandler(svc *service.OrderService, orderRepo *repository.OrderRepo, adminRepo *repository.AdminRepo, encSvc *service.EncryptionService, templateRepo *repository.TemplateRepo) *OrderHandler {
+	return &OrderHandler{svc: svc, orderRepo: orderRepo, adminRepo: adminRepo, encSvc: encSvc, templateRepo: templateRepo}
 }
 
 func (h *OrderHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -71,6 +68,11 @@ func (h *OrderHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := q.Get("search"); v != "" {
 		f.Search = &v
+	}
+	if v := q.Get("user_id"); v != "" {
+		if id, err := uuid.Parse(v); err == nil {
+			f.UserID = &id
+		}
 	}
 	if v := q.Get("page"); v != "" {
 		if p, err := strconv.Atoi(v); err == nil {
@@ -117,21 +119,6 @@ func (h *OrderHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	result := map[string]interface{}{
 		"order":   order,
 		"history": history,
-	}
-
-	// Fetch key if exists
-	if order.KeyID != nil {
-		key, err := h.keyRepo.GetByID(r.Context(), *order.KeyID)
-		if err == nil {
-			result["key"] = map[string]interface{}{
-				"id":         key.ID,
-				"product_id": key.ProductID,
-				"key":        key.Key,
-				"status":     key.Status,
-				"order_id":   key.OrderID,
-				"created_at": key.CreatedAt,
-			}
-		}
 	}
 
 	// Fetch assigned admin info
@@ -204,7 +191,7 @@ func (h *OrderHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	case domain.OrderStatusWaitingActivation:
 		err = h.svc.SimpleStatusChange(r.Context(), id, adminID, domain.OrderStatusWaitingActivation, req.Comment)
 	case domain.OrderStatusKeyIssued:
-		err = h.svc.IssueKey(r.Context(), id, adminID)
+		err = h.svc.SimpleStatusChange(r.Context(), id, adminID, domain.OrderStatusKeyIssued, req.Comment)
 	case domain.OrderStatusAwaitingCredentials:
 		ord, _ := h.orderRepo.GetByID(r.Context(), id)
 		if ord != nil && ord.Status == domain.OrderStatusWaitingActivation {
@@ -267,133 +254,6 @@ func (h *OrderHandler) DecryptCredentials(w http.ResponseWriter, r *http.Request
 
 	handler.RespondJSON(w, http.StatusOK, creds)
 }
-
-func (h *OrderHandler) GetAvailableKeys(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid order ID")
-		return
-	}
-
-	order, err := h.svc.GetByID(r.Context(), id)
-	if err != nil {
-		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Order not found")
-		return
-	}
-
-	keys, _, err := h.keyRepo.GetByProductID(r.Context(), order.ProductID, strPtr("available"), 1, 100)
-	if err != nil {
-		handler.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get keys")
-		return
-	}
-
-	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"keys": keys,
-		"count": len(keys),
-	})
-}
-
-func (h *OrderHandler) AssignSpecificKey(w http.ResponseWriter, r *http.Request) {
-	orderID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid order ID")
-		return
-	}
-
-	var req struct {
-		KeyID string `json:"key_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid JSON")
-		return
-	}
-
-	keyID, err := uuid.Parse(req.KeyID)
-	if err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid key ID")
-		return
-	}
-
-	adminID := handler.GetAdminID(r.Context())
-
-	order, err := h.svc.GetByID(r.Context(), orderID)
-	if err != nil {
-		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Order not found")
-		return
-	}
-
-	if order.Status != domain.OrderStatusPaid {
-		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", "Order must be in PAID status")
-		return
-	}
-
-	key, err := h.keyRepo.GetByID(r.Context(), keyID)
-	if err != nil {
-		handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Key not found")
-		return
-	}
-
-	if key.Status != domain.KeyStatusAvailable {
-		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", "Key is not available")
-		return
-	}
-
-	if key.ProductID != order.ProductID {
-		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", "Key does not match product")
-		return
-	}
-
-	err = h.keyRepo.AssignSpecificKey(r.Context(), keyID, orderID)
-	if err != nil {
-		handler.RespondError(w, http.StatusInternalServerError, "ORDER_ERROR", "Failed to assign key")
-		return
-	}
-
-	order.KeyID = &keyID
-	if err := h.orderRepo.Update(r.Context(), order); err != nil {
-		handler.RespondError(w, http.StatusInternalServerError, "ORDER_ERROR", "Failed to update order")
-		return
-	}
-
-	h.svc.SendChatMessage(r.Context(), orderID, adminID, "admin", "Ваш ключ активации: "+key.Key)
-
-	if err := h.changeStatus(r.Context(), order, domain.OrderStatusKeyIssued, adminID, domain.ChangedByAdmin, "Key issued"); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", err.Error())
-		return
-	}
-
-	if err := h.changeStatus(r.Context(), order, domain.OrderStatusCompleted, uuid.Nil, domain.ChangedBySystem, "Order completed"); err != nil {
-		handler.RespondError(w, http.StatusBadRequest, "ORDER_ERROR", err.Error())
-		return
-	}
-
-	handler.RespondJSON(w, http.StatusOK, map[string]string{"status": "key_assigned"})
-}
-
-func (h *OrderHandler) changeStatus(ctx context.Context, order *domain.Order, newStatus domain.OrderStatus, changedByID uuid.UUID, changedByType domain.ChangedByType, comment string) error {
-	oldStatus := order.Status
-	order.Status = newStatus
-
-	if err := h.svc.UpdateStatus(ctx, order.ID, newStatus); err != nil {
-		return err
-	}
-
-	history := &domain.OrderHistory{
-		OrderID:       order.ID,
-		OldStatus:     &oldStatus,
-		NewStatus:     newStatus,
-		ChangedByID:   func() *uuid.UUID { if changedByID == uuid.Nil { return nil }; return &changedByID }(),
-		ChangedByType: changedByType,
-		Comment:       &comment,
-	}
-	if err := h.svc.AddHistory(ctx, history); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func strPtr(s string) *string { return &s }
 
 func (h *OrderHandler) SendChatMessage(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))

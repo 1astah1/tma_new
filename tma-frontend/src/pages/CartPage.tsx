@@ -1,17 +1,22 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../stores/cartStore'
+import { useCreateBatchOrder } from '../hooks/useOrders'
+import { useGoBack } from '../hooks/useGoBack'
 import { Header } from '../components/layout/Header'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { formatPrice } from '../utils/format'
+import { openManagerCartChat } from '../utils/managerChat'
 import { useToast } from '../components/ui/Toast'
 import api from '../services/api'
 
 export function CartPage() {
   const nav = useNavigate()
+  const goBack = useGoBack('/')
   const toast = useToast()
   const { items, removeItem, updateQuantity, getTotal, getSubtotal, getItemCount, clearCart, promoCode, promoDiscount, setPromoCode, setPromoDiscount } = useCart()
+  const createBatch = useCreateBatchOrder()
   const [promoInput, setPromoInput] = useState('')
   const [validating, setValidating] = useState(false)
 
@@ -45,8 +50,8 @@ export function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="pb-24">
-        <Header title="Корзина" />
+      <div className="pb-page">
+        <Header title="Корзина" onBack={goBack} />
         <div className="flex flex-col items-center justify-center py-16 text-[var(--tg-hint)]">
           <div className="text-5xl mb-4">🛒</div>
           <p className="text-lg">Корзина пуста</p>
@@ -59,8 +64,8 @@ export function CartPage() {
   }
 
   return (
-    <div className="pb-32">
-      <Header title={`Корзина (${getItemCount()})`} />
+    <div className="pb-page-bar">
+      <Header title={`Корзина (${getItemCount()})`} onBack={goBack} />
       <div className="p-4 space-y-3">
         {items.map((item) => (
           <Card key={`${item.productId}-${item.variantId || 'default'}`}>
@@ -72,10 +77,10 @@ export function CartPage() {
                   className="w-16 h-16 rounded-lg object-cover"
                 />
               )}
-              <div className="flex-1">
-                <div className="font-medium text-sm">{item.title}</div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium text-sm">{item.title}</div>
                 <div className="text-xs text-[var(--tg-hint)] mt-0.5">
-                  {item.deliveryMethod === 'key' ? '🔑 Ключ' : '🔐 Активация'}
+                  💬 Через менеджера
                 </div>
                 <div className="font-bold text-[var(--tg-button)] mt-1">
                   {formatPrice(item.price * item.quantity)}
@@ -123,7 +128,7 @@ export function CartPage() {
               value={promoInput}
               onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
               placeholder="Промокод"
-              className="flex-1 px-3 py-2 bg-[var(--tg-secondary)] border border-[var(--tg-border)] rounded-lg text-sm focus:outline-none focus:border-[var(--tg-button)]"
+              className="flex-1 min-w-0 px-3 py-2 bg-[var(--tg-secondary)] border border-[var(--tg-border)] rounded-lg text-base focus:outline-none focus:border-[var(--tg-button)]"
             />
             <Button variant="secondary" onClick={validatePromo} loading={validating}>
               OK
@@ -131,7 +136,8 @@ export function CartPage() {
           </div>
         )}
 
-        <div className="fixed bottom-20 left-0 right-0 p-4 bg-[var(--tg-bg)] border-t border-[var(--tg-secondary)]">
+        <div className="fixed bottom-above-nav left-0 right-0 z-40 border-t border-[var(--tg-secondary)] bg-[var(--tg-bg)]/95 backdrop-blur-lg">
+          <div className="mx-auto max-w-lg p-4">
           <div className="space-y-1 mb-3">
             <div className="flex justify-between text-sm">
               <span className="text-[var(--tg-hint)]">Подытог:</span>
@@ -150,17 +156,39 @@ export function CartPage() {
               </span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={clearCart} className="flex-1">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="secondary" onClick={clearCart} className="w-full flex-1 min-w-0 text-sm sm:text-base">
               Очистить
             </Button>
             <Button
               variant="primary"
-              onClick={() => nav('/checkout?from=cart')}
-              className="flex-1"
+              onClick={async () => {
+                try {
+                  const result = await createBatch.mutateAsync({
+                    items: items.map((i) => ({
+                      product_id: i.productId,
+                      delivery_method: 'activation' as const,
+                      variant_id: i.variantId,
+                      quantity: i.quantity,
+                    })),
+                    promoCode: promoCode || undefined,
+                  })
+                  const orderIds = result.order_ids ?? result.orders?.map((o) => o.id) ?? []
+                  clearCart()
+                  if (orderIds.length === 1) {
+                    nav(`/orders/${orderIds[0]}`)
+                  }
+                  openManagerCartChat(orderIds)
+                } catch {
+                  toast.toast('Не удалось оформить заказ. Попробуйте ещё раз.', 'error')
+                }
+              }}
+              loading={createBatch.isPending}
+              className="w-full flex-1 min-w-0 text-sm sm:text-base"
             >
-              Оформить ({getItemCount()})
+              <span className="truncate">Купить в Telegram ({getItemCount()})</span>
             </Button>
+          </div>
           </div>
         </div>
       </div>

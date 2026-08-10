@@ -2,20 +2,27 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useCart } from '../../stores/cartStore'
 
 const items = [
-  { path: '/', label: 'Магазин', icon: 'cart', color: '#38bdf8' },
-  { path: '/orders', label: 'Заказы', icon: 'orders', color: '#a78bfa' },
-  { path: '/profile', label: 'Профиль', icon: 'profile', color: '#fb923c' },
+  { path: '/', label: 'Главная', icon: 'home', color: '#c9a84c' },
+  { path: '/catalog', label: 'Каталог', icon: 'catalog', color: '#c9a84c' },
+  { path: '/cart', label: 'Корзина', icon: 'cart', color: '#c9a84c' },
+  { path: '/profile', label: 'Профиль', icon: 'profile', color: '#c9a84c' },
 ]
+
+const HomeIcon = ({ active, color }: { active: boolean; color: string }) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ filter: active ? `drop-shadow(0 0 6px ${color})` : 'none' }}>
+    <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z" stroke={active ? color : '#64748b'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const CatalogIcon = ({ active, color }: { active: boolean; color: string }) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ filter: active ? `drop-shadow(0 0 6px ${color})` : 'none' }}>
+    <path d="M4 6h7v7H4V6zm9 0h7v7h-7V6zM4 15h7v3H4v-3zm9 0h7v3h-7v-3z" stroke={active ? color : '#64748b'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
 
 const CartIcon = ({ active, color }: { active: boolean; color: string }) => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ filter: active ? `drop-shadow(0 0 6px ${color})` : 'none' }}>
     <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" stroke={active ? color : '#64748b'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
-const OrdersIcon = ({ active, color }: { active: boolean; color: string }) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ filter: active ? `drop-shadow(0 0 6px ${color})` : 'none' }}>
-    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke={active ? color : '#64748b'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
@@ -27,11 +34,22 @@ const ProfileIcon = ({ active, color }: { active: boolean; color: string }) => (
 
 const getIcon = (icon: string, active: boolean, color: string) => {
   switch (icon) {
+    case 'home': return <HomeIcon active={active} color={color} />
+    case 'catalog': return <CatalogIcon active={active} color={color} />
     case 'cart': return <CartIcon active={active} color={color} />
-    case 'orders': return <OrdersIcon active={active} color={color} />
     case 'profile': return <ProfileIcon active={active} color={color} />
     default: return null
   }
+}
+
+function isNavActive(path: string, pathname: string): boolean {
+  if (path === '/') return pathname === '/'
+  if (path === '/catalog') return pathname === '/catalog'
+  if (path === '/cart') return pathname === '/cart'
+  if (path === '/profile') {
+    return ['/profile', '/orders', '/wishlist', '/support', '/rules'].includes(pathname)
+  }
+  return pathname === path
 }
 
 export function BottomNav() {
@@ -40,17 +58,17 @@ export function BottomNav() {
   const itemCount = useCart((s) => s.getItemCount())
 
   return (
-    <div className="fixed bottom-2 left-2 right-2 z-50">
-      <div className="max-w-md mx-auto bg-[#1a1035]/95 backdrop-blur-xl rounded-xl border border-white/10 shadow-lg">
+    <div className="fixed bottom-[max(0.5rem,var(--app-safe-bottom))] left-2 right-2 z-50">
+      <div className="mx-auto max-w-lg bg-[#161616]/95 backdrop-blur-xl rounded-xl border border-white/10 shadow-lg">
         <div className="flex items-center justify-around py-1.5 px-1">
           {items.map((item) => {
-            const active = location.pathname === item.path
-            const isCart = item.path === '/'
+            const active = isNavActive(item.path, location.pathname)
+            const isCart = item.path === '/cart'
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className="flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg transition-all duration-200 relative"
+                className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-lg transition-all duration-200 relative min-w-0 flex-1"
                 style={{
                   background: active ? `radial-gradient(ellipse at center, ${item.color}10 0%, transparent 70%)` : 'transparent',
                 }}
@@ -64,7 +82,7 @@ export function BottomNav() {
                   )}
                 </div>
                 <span
-                  className="text-[10px] font-medium transition-colors duration-200"
+                  className="text-[10px] font-medium transition-colors duration-200 truncate max-w-full"
                   style={{ color: active ? item.color : '#64748b' }}
                 >
                   {item.label}
