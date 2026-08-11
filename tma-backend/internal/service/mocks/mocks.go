@@ -146,6 +146,31 @@ func (m *MockProductStore) SyncMetadataFromImports(ctx context.Context, minPrice
 	return int64(args.Int(0)), args.Error(1)
 }
 
+func (m *MockProductStore) SyncCardFromImports(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockProductStore) ListMatchesForAudit(ctx context.Context) ([]repository.ProductMatchRow, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]repository.ProductMatchRow), args.Error(1)
+}
+
+func (m *MockProductStore) DeactivateByID(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *MockProductStore) ListGamesForTitleFix(ctx context.Context) ([]domain.Product, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]domain.Product), args.Error(1)
+}
+
+func (m *MockProductStore) UpdateTitle(ctx context.Context, id uuid.UUID, title, titleKey string) error {
+	args := m.Called(ctx, id, title, titleKey)
+	return args.Error(0)
+}
+
 type MockKeyStore struct {
 	mock.Mock
 }

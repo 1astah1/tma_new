@@ -44,7 +44,7 @@ type CatalogImportYearOption struct {
 
 type CatalogImportFilterOptions struct {
 	Publishers   []CatalogImportPublisherOption `json:"publishers"`
-	ReleaseYears []CatalogImportYearOption    `json:"release_years"`
+	ReleaseYears []CatalogImportYearOption      `json:"release_years"`
 	Backfilled   bool                           `json:"backfilled"`
 }
 
@@ -88,6 +88,8 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS title_key TEXT NOT NULL DEFAULT ''
 CREATE INDEX IF NOT EXISTS idx_products_title_dedup ON products(title_key, platform);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS vitrina_score DOUBLE PRECISION NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_products_vitrina_score ON products(vitrina_score DESC) WHERE type = 'game' AND status = 'active';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS prices JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE catalog_imports ADD COLUMN IF NOT EXISTS prices JSONB NOT NULL DEFAULT '{}'::jsonb;
 `)
 	if err != nil {
 		return err
@@ -140,6 +142,34 @@ FROM (
 ) sub
 WHERE catalog_imports.id = sub.id`)
 	return err
+}
+
+// BackfillDescriptionsByTitleKey переносит описание и картинку между позициями
+// одной игры: у PS-версии текст может отсутствовать, а у Xbox-версии быть, и
+// наоборот. Карточка одна, поэтому пустых полей быть не должно.
+func (r *CatalogImportRepo) BackfillDescriptionsByTitleKey(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `
+UPDATE catalog_imports target SET
+    description = COALESCE(NULLIF(target.description, ''), donor.description),
+    image_url = COALESCE(NULLIF(target.image_url, ''), donor.image_url),
+    updated_at = NOW()
+FROM (
+    SELECT DISTINCT ON (title_key)
+        title_key,
+        description,
+        image_url
+    FROM catalog_imports
+    WHERE title_key <> ''
+      AND description IS NOT NULL
+      AND length(description) > 60
+    ORDER BY title_key, length(description) DESC
+) donor
+WHERE target.title_key = donor.title_key
+  AND (target.description IS NULL OR length(target.description) <= 60 OR target.image_url IS NULL)`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (r *CatalogImportRepo) CountNeedingMetadata(ctx context.Context, source string) (int, error) {
@@ -308,8 +338,8 @@ func (r *CatalogImportRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.
 
 func (r *CatalogImportRepo) UpsertFresh(ctx context.Context, item *domain.CatalogImport) error {
 	err := r.db.GetContext(ctx, item, `
-INSERT INTO catalog_imports (external_id, source, title, title_key, platform_family, description, image_url, platforms, game_section, release_year, release_date, publisher, original_price_rub, original_currency, raw, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE(NULLIF($15, ''), '{}')::jsonb, 'pending')
+INSERT INTO catalog_imports (external_id, source, title, title_key, platform_family, description, image_url, platforms, game_section, release_year, release_date, publisher, original_price_rub, original_currency, raw, prices, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE(NULLIF($15, ''), '{}')::jsonb, COALESCE(NULLIF($16, ''), '{}')::jsonb, 'pending')
 ON CONFLICT (source, external_id) DO UPDATE SET
     title = EXCLUDED.title,
     title_key = EXCLUDED.title_key,
@@ -324,21 +354,57 @@ ON CONFLICT (source, external_id) DO UPDATE SET
     release_date = EXCLUDED.release_date,
     publisher = EXCLUDED.publisher,
     raw = EXCLUDED.raw,
+    prices = EXCLUDED.prices,
     status = 'pending',
     product_id = NULL,
     updated_at = NOW()
 RETURNING *`,
 		item.ExternalID, item.Source, item.Title, item.TitleKey, item.PlatformFamily, item.Description, item.ImageURL, item.Platforms,
 		item.GameSection, item.ReleaseYear, item.ReleaseDate, item.Publisher,
-		item.OriginalPriceRUB, item.OriginalCurrency, string(item.Raw),
+		item.OriginalPriceRUB, item.OriginalCurrency, string(item.Raw), string(item.Prices),
+	)
+	return err
+}
+
+// UpsertWanted — upsert для адресного импорта по списку. В отличие от
+// UpsertPending всегда перезаписывает название, описание и картинку: эти поля
+// мы формируем сами из списка, и повторный прогон обязан их исправлять.
+func (r *CatalogImportRepo) UpsertWanted(ctx context.Context, item *domain.CatalogImport) error {
+	err := r.db.GetContext(ctx, item, `
+INSERT INTO catalog_imports (external_id, source, title, title_key, platform_family, description, image_url, platforms, game_section, release_year, release_date, publisher, original_price_rub, original_currency, raw, prices, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE(NULLIF($15, ''), '{}')::jsonb, COALESCE(NULLIF($16, ''), '{}')::jsonb, 'pending')
+ON CONFLICT (source, external_id) DO UPDATE SET
+    title = EXCLUDED.title,
+    title_key = EXCLUDED.title_key,
+    platform_family = EXCLUDED.platform_family,
+    description = COALESCE(NULLIF(EXCLUDED.description, ''), catalog_imports.description),
+    image_url = COALESCE(NULLIF(EXCLUDED.image_url, ''), catalog_imports.image_url),
+    platforms = EXCLUDED.platforms,
+    original_price_rub = EXCLUDED.original_price_rub,
+    original_currency = EXCLUDED.original_currency,
+    game_section = EXCLUDED.game_section,
+    release_year = EXCLUDED.release_year,
+    release_date = EXCLUDED.release_date,
+    publisher = EXCLUDED.publisher,
+    raw = EXCLUDED.raw,
+    -- Цены сливаем, а не заменяем: если стор временно недоступен по одному
+    -- региону, прогон вернёт только часть цен, и замена стёрла бы остальные.
+    prices = CASE WHEN EXCLUDED.prices = '{}'::jsonb
+                  THEN catalog_imports.prices
+                  ELSE catalog_imports.prices || EXCLUDED.prices END,
+    updated_at = NOW()
+RETURNING *`,
+		item.ExternalID, item.Source, item.Title, item.TitleKey, item.PlatformFamily, item.Description, item.ImageURL, item.Platforms,
+		item.GameSection, item.ReleaseYear, item.ReleaseDate, item.Publisher,
+		item.OriginalPriceRUB, item.OriginalCurrency, string(item.Raw), string(item.Prices),
 	)
 	return err
 }
 
 func (r *CatalogImportRepo) UpsertPending(ctx context.Context, item *domain.CatalogImport) error {
 	err := r.db.GetContext(ctx, item, `
-INSERT INTO catalog_imports (external_id, source, title, title_key, platform_family, description, image_url, platforms, game_section, release_year, release_date, publisher, original_price_rub, original_currency, raw, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE(NULLIF($15, ''), '{}')::jsonb, 'pending')
+INSERT INTO catalog_imports (external_id, source, title, title_key, platform_family, description, image_url, platforms, game_section, release_year, release_date, publisher, original_price_rub, original_currency, raw, prices, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE(NULLIF($15, ''), '{}')::jsonb, COALESCE(NULLIF($16, ''), '{}')::jsonb, 'pending')
 ON CONFLICT (source, external_id) DO UPDATE SET
     title = CASE WHEN catalog_imports.status = 'pending' THEN EXCLUDED.title ELSE catalog_imports.title END,
     title_key = EXCLUDED.title_key,
@@ -353,11 +419,12 @@ ON CONFLICT (source, external_id) DO UPDATE SET
     release_date = EXCLUDED.release_date,
     publisher = EXCLUDED.publisher,
     raw = EXCLUDED.raw,
+    prices = CASE WHEN EXCLUDED.prices = '{}'::jsonb THEN catalog_imports.prices ELSE EXCLUDED.prices END,
     updated_at = NOW()
 RETURNING *`,
 		item.ExternalID, item.Source, item.Title, item.TitleKey, item.PlatformFamily, item.Description, item.ImageURL, item.Platforms,
 		item.GameSection, item.ReleaseYear, item.ReleaseDate, item.Publisher,
-		item.OriginalPriceRUB, item.OriginalCurrency, string(item.Raw),
+		item.OriginalPriceRUB, item.OriginalCurrency, string(item.Raw), string(item.Prices),
 	)
 	return err
 }

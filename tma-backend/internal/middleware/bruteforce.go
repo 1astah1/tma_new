@@ -8,17 +8,17 @@ import (
 )
 
 type LoginAttempt struct {
-	Count      int
+	Count       int
 	LastAttempt time.Time
 	LockedUntil time.Time
 }
 
 type BruteForceProtector struct {
-	attempts   map[string]*LoginAttempt
-	mu         sync.Mutex
-	maxAttempts int
+	attempts     map[string]*LoginAttempt
+	mu           sync.Mutex
+	maxAttempts  int
 	lockDuration time.Duration
-	ttl        time.Duration
+	ttl          time.Duration
 }
 
 func NewBruteForceProtector(maxAttempts int, lockDuration time.Duration) *BruteForceProtector {

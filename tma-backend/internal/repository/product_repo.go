@@ -33,6 +33,22 @@ type ProductFilter struct {
 	Limit    int      `json:"limit"`
 }
 
+// productGroupExpr — по чему считается «одна игра»: общий title_key, а если
+// его нет, строка остаётся сама по себе.
+const productGroupExpr = `COALESCE(NULLIF(title_key, ''), id::text)`
+
+// productPlatformRankExpr — какую платформу показывать представителем карточки.
+const productPlatformRankExpr = `CASE platform
+    WHEN 'ps5' THEN 1
+    WHEN 'xbox' THEN 2
+    WHEN 'ps4' THEN 3
+    WHEN 'pc' THEN 4
+    ELSE 5 END`
+
+const productColumns = `id, title, title_key, description, platform, type, game_section,
+    release_date, price, discount_percent, variants, image_url, delivery_methods,
+    status, vitrina_score, prices, created_at, updated_at`
+
 func (r *ProductRepo) List(ctx context.Context, f ProductFilter) ([]domain.Product, int, error) {
 	args := []interface{}{}
 	where := []string{}
@@ -63,9 +79,18 @@ func (r *ProductRepo) List(ctx context.Context, f ProductFilter) ([]domain.Produ
 		args = append(args, *f.Type)
 		argIdx++
 	}
-	if f.Search != nil && *f.Search != "" {
-		where = append(where, fmt.Sprintf("title ILIKE '%%' || $%d || '%%'", argIdx))
-		args = append(args, *f.Search)
+	searchArg := 0
+	if f.Search != nil && strings.TrimSpace(*f.Search) != "" {
+		// Точное вхождение, все слова запроса в любом порядке, либо похожее
+		// написание — иначе «call of dute» не находит Call of Duty.
+		where = append(where, fmt.Sprintf(`(
+        lower(title) LIKE '%%' || lower($%d) || '%%'
+     OR title_key LIKE '%%' || lower($%d) || '%%'
+     OR lower(title) %% lower($%d)
+     OR title_key %% lower($%d)
+)`, argIdx, argIdx, argIdx, argIdx))
+		args = append(args, strings.TrimSpace(*f.Search))
+		searchArg = argIdx
 		argIdx++
 	}
 	if f.MinPrice != nil {
@@ -89,7 +114,9 @@ func (r *ProductRepo) List(ctx context.Context, f ProductFilter) ([]domain.Produ
 		whereClause = " WHERE " + strings.Join(where, " AND ")
 	}
 
-	countQuery := "SELECT COUNT(*) FROM products" + whereClause
+	// Считаем игры, а не строки: у одной игры отдельная строка на каждую
+	// платформу, и без этого пагинация выдаёт одну и ту же игру дважды.
+	countQuery := "SELECT COUNT(DISTINCT " + productGroupExpr + ") FROM products" + whereClause
 	var total int
 	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return nil, 0, err
@@ -116,8 +143,31 @@ func (r *ProductRepo) List(ctx context.Context, f ProductFilter) ([]domain.Produ
 		sortOrder = "ASC"
 	}
 
-	query := "SELECT * FROM products" + whereClause + fmt.Sprintf(" ORDER BY %s %s", sortField, sortOrder)
-	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	// На страницу выдаём по одной строке на игру — представителем берём
+	// платформу с наибольшим приоритетом (PS5 → Xbox → PS4 → PC).
+	//
+	// В сортировке обязателен добивочный ключ id: у сотен игр одинаковый
+	// vitrina_score, и без него Postgres волен возвращать строки в разном
+	// порядке на каждой странице — одни игры показывались дважды, другие
+	// не показывались вовсе.
+	orderExpr := fmt.Sprintf("%s %s, id", sortField, sortOrder)
+	if searchArg > 0 {
+		orderExpr = fmt.Sprintf(
+			"GREATEST(similarity(lower(title), lower($%d)), similarity(title_key, lower($%d))) DESC, %s %s, id",
+			searchArg, searchArg, sortField, sortOrder)
+	}
+
+	query := fmt.Sprintf(`
+SELECT %s FROM (
+    SELECT DISTINCT ON (%s) *
+    FROM products
+    %s
+    ORDER BY %s, %s, price ASC
+) grouped
+ORDER BY %s
+LIMIT $%d OFFSET $%d`,
+		productColumns, productGroupExpr, whereClause, productGroupExpr, productPlatformRankExpr,
+		orderExpr, argIdx, argIdx+1)
 	args = append(args, f.Limit, offset)
 
 	var products []domain.Product
@@ -584,6 +634,46 @@ func (r *ProductRepo) StatusByIDs(ctx context.Context, ids []uuid.UUID) (map[uui
 	return result, nil
 }
 
+// SyncCardFromImports подтягивает в карточку название, описание и картинку из
+// связанного импорта: цены обновляет SyncMetadataFromImports, а текстовая часть
+// без этого застывает на том, что было в момент создания карточки.
+func (r *ProductRepo) ListGamesForTitleFix(ctx context.Context) ([]domain.Product, error) {
+	var products []domain.Product
+	err := r.db.SelectContext(ctx, &products,
+		`SELECT * FROM products WHERE type = 'game' ORDER BY created_at`)
+	return products, err
+}
+
+func (r *ProductRepo) UpdateTitle(ctx context.Context, id uuid.UUID, title, titleKey string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE products SET title = $2, title_key = $3, updated_at = NOW() WHERE id = $1`,
+		id, title, titleKey)
+	return err
+}
+
+func (r *ProductRepo) SyncCardFromImports(ctx context.Context) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `
+UPDATE products p
+SET
+    title = ci.title,
+    title_key = ci.title_key,
+    description = COALESCE(NULLIF(ci.description, ''), p.description),
+    image_url = COALESCE(NULLIF(ci.image_url, ''), p.image_url),
+    updated_at = NOW()
+FROM catalog_imports ci
+WHERE ci.product_id = p.id
+  AND p.type = 'game'
+  AND ci.title <> ''
+  AND (p.title <> ci.title OR p.title_key <> ci.title_key
+       OR (p.description IS NULL AND ci.description IS NOT NULL)
+       OR (p.image_url IS NULL AND ci.image_url IS NOT NULL))`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 func (r *ProductRepo) SyncMetadataFromImports(ctx context.Context, minPrice float64) (int64, error) {
 	res, err := r.db.ExecContext(ctx, `
 UPDATE products p
@@ -677,4 +767,36 @@ LIMIT 1`, productID).Scan(&externalID, &source)
 		return "", "", false
 	}
 	return externalID, source, true
+}
+
+// ProductMatchRow — карточка вместе с названием позиции в сторе, к которой
+// она привязана. Нужна для проверки, что карточка ведёт на саму игру.
+type ProductMatchRow struct {
+	ID         uuid.UUID `db:"id"`
+	Title      string    `db:"title"`
+	Platform   string    `db:"platform"`
+	StoreTitle string    `db:"store_title"`
+	Source     string    `db:"source"`
+	ImportID   uuid.UUID `db:"import_id"`
+}
+
+func (r *ProductRepo) ListMatchesForAudit(ctx context.Context) ([]ProductMatchRow, error) {
+	var rows []ProductMatchRow
+	err := r.db.SelectContext(ctx, &rows, `
+SELECT p.id,
+       p.title,
+       p.platform::text AS platform,
+       coalesce(ci.raw->>'name', ci.raw#>>'{LocalizedProperties,0,ProductTitle}', '') AS store_title,
+       ci.source,
+       ci.id AS import_id
+FROM products p
+JOIN catalog_imports ci ON ci.product_id = p.id
+WHERE p.type = 'game' AND p.status = 'active'`)
+	return rows, err
+}
+
+func (r *ProductRepo) DeactivateByID(ctx context.Context, id uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE products SET status = 'inactive', updated_at = NOW() WHERE id = $1`, id)
+	return err
 }

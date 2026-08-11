@@ -11,7 +11,7 @@ import (
 )
 
 type limiterEntry struct {
-	limiter   *rate.Limiter
+	limiter    *rate.Limiter
 	lastAccess time.Time
 }
 

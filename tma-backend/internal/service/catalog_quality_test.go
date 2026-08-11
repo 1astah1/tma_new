@@ -9,11 +9,11 @@ import (
 
 func TestIsNonGameStoreItem(t *testing.T) {
 	cases := map[string]bool{
-		"Game Demo":                    true,
-		"Dynamic Theme - Spider-Man":   true,
-		"Slot Machine Casino":          false,
-		"GGmuks Casino: Slots (PS4)":   false,
-		"Elden Ring":                   false,
+		"Game Demo":                  true,
+		"Dynamic Theme - Spider-Man": true,
+		"Slot Machine Casino":        false,
+		"GGmuks Casino: Slots (PS4)": false,
+		"Elden Ring":                 false,
 	}
 	for title, want := range cases {
 		if got := IsNonGameStoreItem(title); got != want {

@@ -73,12 +73,14 @@ func (h *ContentHandler) HomeFeed(w http.ResponseWriter, r *http.Request) {
 
 func (h *ContentHandler) ShopSettings(w http.ResponseWriter, r *http.Request) {
 	result := map[string]interface{}{
-		"support_url":  "https://t.me/coin_mint_chat",
-		"reviews_url":  "https://t.me/coin_mint_reviews",
-		"shop_rules":   "",
+		"support_url": "https://t.me/coin_mint_chat",
+		"reviews_url": "https://t.me/coin_mint_reviews",
+		"shop_rules":  "",
+		// Личка менеджера: заявка на покупку уходит человеку, не боту.
+		"manager_url": "https://t.me/KromkaJQ",
 	}
 
-	for _, key := range []string{"support_url", "reviews_url", "shop_rules"} {
+	for _, key := range []string{"support_url", "reviews_url", "shop_rules", "manager_url"} {
 		setting, err := h.settingsRepo.Get(r.Context(), key)
 		if err != nil {
 			continue

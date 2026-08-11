@@ -148,15 +148,15 @@ func (h *OrderHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 			}
 
 			result["account"] = map[string]interface{}{
-				"id":             account.ID,
-				"user_id":        account.UserID,
-				"order_id":       account.OrderID,
-				"platform":       account.Platform,
-				"login":          string(loginBytes),
-				"password":       string(passwordBytes),
+				"id":              account.ID,
+				"user_id":         account.UserID,
+				"order_id":        account.OrderID,
+				"platform":        account.Platform,
+				"login":           string(loginBytes),
+				"password":        string(passwordBytes),
 				"two_factor_code": twoFactorCode,
-				"notes":          account.Notes,
-				"created_at":     account.CreatedAt,
+				"notes":           account.Notes,
+				"created_at":      account.CreatedAt,
 			}
 		}
 	}

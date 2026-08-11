@@ -21,7 +21,22 @@
       })();
     </script>
     <title>COIN MINT</title>
-  </head>
+    <script>
+    // Браузер мог сохранить index.html прошлой сборки — он ссылается на файл,
+    // которого на сервере уже нет: скрипт не грузится, экран остаётся белым.
+    // Ловим это и один раз перезагружаемся мимо кэша.
+    (function () {
+      var KEY = 'bundle-reload-at';
+      window.addEventListener('error', function (event) {
+        var el = event.target;
+        if (!el || el.tagName !== 'SCRIPT' || !el.src || el.src.indexOf('/assets/') === -1) return;
+        if (Date.now() - Number(sessionStorage.getItem(KEY) || 0) < 30000) return;
+        sessionStorage.setItem(KEY, String(Date.now()));
+        location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+      }, true);
+    })();
+  </script>
+</head>
   <body class="bg-tg-bg text-tg-text">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

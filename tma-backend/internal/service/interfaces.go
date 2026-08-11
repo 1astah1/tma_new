@@ -37,6 +37,11 @@ type ProductStore interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	ActivateAllGames(ctx context.Context) (int64, error)
 	SyncMetadataFromImports(ctx context.Context, minPrice float64) (int64, error)
+	SyncCardFromImports(ctx context.Context) (int64, error)
+	ListMatchesForAudit(ctx context.Context) ([]repository.ProductMatchRow, error)
+	DeactivateByID(ctx context.Context, id uuid.UUID) error
+	ListGamesForTitleFix(ctx context.Context) ([]domain.Product, error)
+	UpdateTitle(ctx context.Context, id uuid.UUID, title, titleKey string) error
 }
 
 type KeyStore interface {

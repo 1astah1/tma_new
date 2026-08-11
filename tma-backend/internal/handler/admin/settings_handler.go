@@ -22,7 +22,9 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if key != "" {
 		s, err := h.repo.Get(r.Context(), key)
 		if err != nil {
-			handler.RespondError(w, http.StatusNotFound, "NOT_FOUND", "Setting not found")
+			// Ненастроенный параметр — это не ошибка: админка просто покажет
+			// значение по умолчанию. 404 здесь только засорял консоль.
+			handler.RespondJSON(w, http.StatusOK, map[string]interface{}{"key": key, "value": nil})
 			return
 		}
 		handler.RespondJSON(w, http.StatusOK, s)
@@ -64,12 +66,12 @@ func (h *SettingsHandler) PricingPreview(w http.ResponseWriter, r *http.Request)
 		rate = manual
 	}
 	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"formulas": cfg,
+		"formulas":     cfg,
 		"try_rub_rate": rate,
 		"examples": map[string]float64{
-			"turkey_500_try":  service.TurkeyNominalPrice(500),
+			"turkey_500_try":   service.TurkeyNominalPrice(500),
 			"ukraine_1000_uah": service.UkrainePrice(1000),
-			"xbox_10_usd":     service.XboxUSAPrice(10),
+			"xbox_10_usd":      service.XboxUSAPrice(10),
 		},
 	})
 }

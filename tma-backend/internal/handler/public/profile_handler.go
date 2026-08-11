@@ -33,7 +33,7 @@ func (h *ProfileHandler) GetPaymentDetails(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		// Return defaults if not in DB
 		handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
-			"sbp": map[string]string{"phone": "89841157865", "bank": "Альфа-Банк", "receiver": "Олеся К."},
+			"sbp":  map[string]string{"phone": "89841157865", "bank": "Альфа-Банк", "receiver": "Олеся К."},
 			"card": map[string]string{"number": "2200153684839138", "bank": "Альфа-Банк"},
 			"crypto": map[string]string{
 				"binance": "143915969",

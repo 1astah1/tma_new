@@ -41,10 +41,10 @@ func main() {
 	hidden, _ := products.DeactivateUnsellableGames(ctx, service.MinPaidPriceRUB())
 
 	out := map[string]interface{}{
-		"enriched":         enriched,
-		"products_synced":  synced,
-		"products_hidden":  hidden,
-		"try_rub_rate":     service.TRYToRUBRate(),
+		"enriched":        enriched,
+		"products_synced": synced,
+		"products_hidden": hidden,
+		"try_rub_rate":    service.TRYToRUBRate(),
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")

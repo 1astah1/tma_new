@@ -8,8 +8,10 @@ import { useGoBack } from '../hooks/useGoBack'
 import { Header } from '../components/layout/Header'
 import { Button, Loader } from '../components/ui/Button'
 import { EditionPricingPanel } from '../components/product/EditionPricingPanel'
+import { orderErrorMessage } from '../utils/orderError'
+import { useShopSettings } from '../hooks/useContent'
 import { formatPrice, formatPriceOrManager } from '../utils/format'
-import { openManagerOrderChat } from '../utils/managerChat'
+import { buildPurchaseRequestText, openManagerRequest } from '../utils/managerChat'
 import { formatReleaseDate, isPreorderProduct } from '../utils/productPreorder'
 import {
   EditionPlatformKey,
@@ -42,6 +44,7 @@ export function ProductPage() {
   const toast = useToast()
   const { data: product, isLoading } = useProduct(id!)
   const createOrder = useCreateOrder()
+  const { data: shopSettings } = useShopSettings()
   const { addItem, getItemCount } = useCart()
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -125,6 +128,35 @@ export function ProductPage() {
     toast.toast(`Добавлено в корзину (${getItemCount()})`, 'success')
   }
 
+  const qtyForRequest =
+    product?.type === 'currency' || product?.type === 'subscription' ? quantity : 1
+
+  // Текст заявки, который пользователь отправит менеджеру одним нажатием.
+  const buildRequestText = (orderId: string) => {
+    const lines = [] as { label: string; value: string }[]
+
+    if (selectedEdition) {
+      lines.push({ label: '🎭 Издание', value: selectedEdition.name })
+      lines.push({ label: '🌍 Регион', value: editionRegionLabel(editionPlatform) })
+    }
+    if (selectedVariant) {
+      lines.push({ label: '📦 Вариант', value: selectedVariant.name })
+    }
+    lines.push({ label: '🖥 Платформа', value: platformLabels[product!.platform] ?? product!.platform })
+    lines.push({ label: '🎯 Категория', value: typeLabels[product!.type] ?? product!.type })
+    if (qtyForRequest > 1) {
+      lines.push({ label: '🔢 Количество', value: `${qtyForRequest} шт` })
+    }
+    lines.push({ label: '🆔 Заказ', value: `#${orderId.slice(0, 8)}` })
+
+    return buildPurchaseRequestText({
+      title: getProductDisplayTitle(product!),
+      lines,
+      total: formatPrice(totalPrice),
+      imageUrl: product!.image_url,
+    })
+  }
+
   const handleBuy = async () => {
     if (!product) return
     if (hasVariants && !selectedVariant) {
@@ -146,10 +178,10 @@ export function ProductPage() {
         variantId,
         quantity: qty,
       })
-      nav(`/orders/${order.id}`)
-      openManagerOrderChat(order.id)
-    } catch {
-      toast.toast('Не удалось создать заказ. Попробуйте ещё раз.', 'error')
+      nav(`/order/${order.id}`)
+      openManagerRequest(shopSettings?.manager_url, buildRequestText(order.id))
+    } catch (err) {
+      toast.toast(orderErrorMessage(err), 'error')
     }
   }
 

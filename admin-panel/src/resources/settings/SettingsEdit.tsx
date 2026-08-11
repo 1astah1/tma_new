@@ -59,6 +59,7 @@ export const SettingsEdit = () => {
   const [shop, setShop] = useState({
     support_url: 'https://t.me/coin_mint_chat',
     reviews_url: 'https://t.me/coin_mint_reviews',
+    manager_url: 'https://t.me/KromkaJQ',
     shop_rules: '',
     bot_username: '',
     ps_store_proxy: '',
@@ -83,12 +84,13 @@ export const SettingsEdit = () => {
       loadSetting('payment_details'),
       loadSetting('support_url'),
       loadSetting('reviews_url'),
+      loadSetting('manager_url'),
       loadSetting('shop_rules'),
       loadSetting('bot_username'),
       loadSetting('ps_store_proxy'),
       loadSetting('pricing_formulas'),
     ])
-      .then(([paymentRaw, supportUrl, reviewsUrl, shopRules, botUsername, psProxy, pricingRaw]) => {
+      .then(([paymentRaw, supportUrl, reviewsUrl, managerUrl, shopRules, botUsername, psProxy, pricingRaw]) => {
         try {
           setPayment(typeof paymentRaw === 'string' ? JSON.parse(paymentRaw) : paymentRaw || { sbp: {}, card: {}, crypto: {} })
         } catch {
@@ -97,6 +99,7 @@ export const SettingsEdit = () => {
         setShop({
           support_url: String(supportUrl || 'https://t.me/coin_mint_chat'),
           reviews_url: String(reviewsUrl || 'https://t.me/coin_mint_reviews'),
+          manager_url: String(managerUrl || 'https://t.me/KromkaJQ'),
           shop_rules: String(shopRules || ''),
           bot_username: String(botUsername || ''),
           ps_store_proxy: String(psProxy || ''),
@@ -114,6 +117,7 @@ export const SettingsEdit = () => {
     setSaving(true)
     await saveSetting('support_url', shop.support_url)
     await saveSetting('reviews_url', shop.reviews_url)
+    await saveSetting('manager_url', shop.manager_url)
     await saveSetting('shop_rules', shop.shop_rules)
     await saveSetting('bot_username', shop.bot_username)
     await saveSetting('ps_store_proxy', shop.ps_store_proxy)
@@ -168,6 +172,15 @@ export const SettingsEdit = () => {
                 </Grid>
                 <Grid item xs={12}>
                   <TextField fullWidth label="Отзывы" value={shop.reviews_url} onChange={(e) => setShop({ ...shop, reviews_url: e.target.value })} />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Личка менеджера (заявки на покупку)"
+                    helperText="Сюда уходит заявка с готовым текстом, когда покупатель жмёт «Купить»"
+                    value={shop.manager_url}
+                    onChange={(e) => setShop({ ...shop, manager_url: e.target.value })}
+                  />
                 </Grid>
                 <Grid item xs={12}>
                   <TextField fullWidth label="Username бота (без @)" value={shop.bot_username} onChange={(e) => setShop({ ...shop, bot_username: e.target.value })} />

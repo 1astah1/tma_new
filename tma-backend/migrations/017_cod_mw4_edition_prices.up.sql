@@ -1,3 +1,6 @@
+-- Колонка появилась только в рантайме (EnsureSchema), но нужна этой миграции.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS prices JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 -- Edition pricing for Call of Duty: Modern Warfare 4 preorder
 UPDATE products
 SET

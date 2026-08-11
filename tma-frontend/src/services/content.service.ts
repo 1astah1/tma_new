@@ -4,6 +4,8 @@ export interface ShopSettings {
   support_url: string
   reviews_url: string
   shop_rules: string
+  /** Личка менеджера, куда уходит заявка на покупку. */
+  manager_url: string
 }
 
 export interface FaqItem {

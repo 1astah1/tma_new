@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	titleNoiseRe = regexp.MustCompile(`[®™©]`)
-	spaceRe      = regexp.MustCompile(`\s+`)
-	editionRe    = regexp.MustCompile(`(?i)\s+[-–—]?\s*(standard|deluxe|ultimate|premium|gold|complete|goty|game of the year|game preview|cross[- ]gen|bundle|edition|digital deluxe|special edition|collectors collector's|vault edition|day one|pre-?order|набор|издание|версия|стандартное|делuxe|делюкс)(\s+edition|\s+версия|\s+издание)?.*$`)
+	titleNoiseRe      = regexp.MustCompile(`[®™©]`)
+	spaceRe           = regexp.MustCompile(`\s+`)
+	editionRe         = regexp.MustCompile(`(?i)\s+[-–—]?\s*(standard|deluxe|ultimate|premium|gold|complete|goty|game of the year|game preview|cross[- ]gen|bundle|edition|digital deluxe|special edition|collectors collector's|vault edition|day one|pre-?order|набор|издание|версия|стандартное|делuxe|делюкс)(\s+edition|\s+версия|\s+издание)?.*$`)
 	platformInTitleRe = regexp.MustCompile(`(?i)\s*[\(\[]?(playstation|ps4|ps5|xbox one|xbox series|xbox|pc|windows)[\)\]]?\s*$`)
 )
 

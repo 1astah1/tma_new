@@ -7,15 +7,38 @@ import { Header } from '../components/layout/Header'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { formatPrice } from '../utils/format'
-import { openManagerCartChat } from '../utils/managerChat'
+import { buildPurchaseRequestText, openManagerRequest } from '../utils/managerChat'
+import { useShopSettings } from '../hooks/useContent'
 import { useToast } from '../components/ui/Toast'
 import api from '../services/api'
+import { orderErrorMessage } from '../utils/orderError'
 
 export function CartPage() {
   const nav = useNavigate()
   const goBack = useGoBack('/')
   const toast = useToast()
   const { items, removeItem, updateQuantity, getTotal, getSubtotal, getItemCount, clearCart, promoCode, promoDiscount, setPromoCode, setPromoDiscount } = useCart()
+  const { data: shopSettings } = useShopSettings()
+
+  // Заявка по корзине: перечисляем позиции, чтобы менеджер видел весь состав.
+  const cartRequestText = (orderIds: string[]) => {
+    const positions = items.map((item, index) => ({
+      label: `${index + 1}. ${item.title}`,
+      value: `${item.quantity} шт · ${formatPrice(item.price * item.quantity)}`,
+    }))
+    if (orderIds.length > 0) {
+      positions.push({
+        label: '🆔 Заказы',
+        value: orderIds.map((orderId) => `#${orderId.slice(0, 8)}`).join(', '),
+      })
+    }
+    return buildPurchaseRequestText({
+      title: `корзина, ${items.length} поз.`,
+      lines: positions,
+      total: formatPrice(getTotal()),
+      imageUrl: items[0]?.image,
+    })
+  }
   const createBatch = useCreateBatchOrder()
   const [promoInput, setPromoInput] = useState('')
   const [validating, setValidating] = useState(false)
@@ -176,11 +199,11 @@ export function CartPage() {
                   const orderIds = result.order_ids ?? result.orders?.map((o) => o.id) ?? []
                   clearCart()
                   if (orderIds.length === 1) {
-                    nav(`/orders/${orderIds[0]}`)
+                    nav(`/order/${orderIds[0]}`)
                   }
-                  openManagerCartChat(orderIds)
-                } catch {
-                  toast.toast('Не удалось оформить заказ. Попробуйте ещё раз.', 'error')
+                  openManagerRequest(shopSettings?.manager_url, cartRequestText(orderIds))
+                } catch (err) {
+                  toast.toast(orderErrorMessage(err), 'error')
                 }
               }}
               loading={createBatch.isPending}

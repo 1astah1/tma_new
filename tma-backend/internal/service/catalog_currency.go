@@ -14,14 +14,14 @@ import (
 )
 
 const (
-	psStoreRegion      = "TR"
-	psStoreLocale      = "tr"
-	psStoreRegionUA    = "UA"
-	psStoreLocaleUA    = "uk"
-	xboxStoreMarket    = "US"
-	xboxStoreLocale    = "en-US"
+	psStoreRegion        = "TR"
+	psStoreLocale        = "tr"
+	psStoreRegionUA      = "UA"
+	psStoreLocaleUA      = "uk"
+	xboxStoreMarket      = "US"
+	xboxStoreLocale      = "en-US"
 	xboxDescriptionLangs = "ru-RU,en-US"
-	defaultTRYToRUB    = 2.85
+	defaultTRYToRUB      = 2.85
 )
 
 var (

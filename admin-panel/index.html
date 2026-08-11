@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <title>COIN MINT Admin</title>
+  <script>
+    // Браузер мог сохранить index.html прошлой сборки — он ссылается на файл,
+    // которого на сервере уже нет: скрипт не грузится, экран остаётся белым.
+    // Ловим это и один раз перезагружаемся мимо кэша.
+    (function () {
+      var KEY = 'bundle-reload-at';
+      window.addEventListener('error', function (event) {
+        var el = event.target;
+        if (!el || el.tagName !== 'SCRIPT' || !el.src || el.src.indexOf('/assets/') === -1) return;
+        if (Date.now() - Number(sessionStorage.getItem(KEY) || 0) < 30000) return;
+        sessionStorage.setItem(KEY, String(Date.now()));
+        location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+      }, true);
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

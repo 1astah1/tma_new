@@ -30,12 +30,12 @@ type Bot struct {
 	notifSvc   *service.NotificationService
 	orderSvc   *service.OrderService
 
-	mu       sync.RWMutex
-	orders   map[int64]string
-	admins   map[int64]string
-	tmaURL   string
-	apiURL   string
-	botName  string
+	mu      sync.RWMutex
+	orders  map[int64]string
+	admins  map[int64]string
+	tmaURL  string
+	apiURL  string
+	botName string
 }
 
 func NewBot(token string, db *sqlx.DB, adminRepo *repository.AdminRepo, orderRepo *repository.OrderRepo, userRepo *repository.UserRepo, notifSvc *service.NotificationService, orderSvc *service.OrderService, tmaURL, apiURL string) *Bot {
@@ -62,10 +62,10 @@ type Update struct {
 }
 
 type Message struct {
-	MessageID int  `json:"message_id"`
-	Chat      Chat `json:"chat"`
+	MessageID int    `json:"message_id"`
+	Chat      Chat   `json:"chat"`
 	Text      string `json:"text"`
-	From      User  `json:"from"`
+	From      User   `json:"from"`
 }
 
 type Chat struct {
@@ -87,8 +87,8 @@ type User struct {
 }
 
 var platformEmoji = map[string]string{
-	"ps4": "🎮 PS4",
-	"ps5": "🎮 PS5",
+	"ps4":  "🎮 PS4",
+	"ps5":  "🎮 PS5",
 	"xbox": "🟢 Xbox",
 }
 
@@ -98,6 +98,14 @@ var typeEmoji = map[string]string{
 	"subscription": "📦",
 }
 
+// shortOrderID — первые 8 символов номера заказа для показа человеку.
+func shortOrderID(id string) string {
+	if len(id) < 8 {
+		return id
+	}
+	return id[:8]
+}
+
 func (b *Bot) fullImageURL(imgPath string) string {
 	if imgPath == "" {
 		return ""
@@ -105,10 +113,34 @@ func (b *Bot) fullImageURL(imgPath string) string {
 	if strings.HasPrefix(imgPath, "https://") {
 		return imgPath
 	}
-	if strings.HasPrefix(imgPath, "/") {
-		return b.apiURL + imgPath
+	// Telegram скачивает картинку сам, поэтому localhost ему не подходит:
+	// загруженные из админки файлы отдаются по публичному адресу мини-аппа.
+	base := strings.TrimRight(b.tmaURL, "/")
+	if base == "" || strings.Contains(base, "localhost") {
+		base = strings.TrimRight(b.apiURL, "/")
 	}
-	return b.apiURL + "/" + imgPath
+	if strings.HasPrefix(imgPath, "/") {
+		return base + imgPath
+	}
+	return base + "/" + imgPath
+}
+
+// processUpdate обрабатывает один апдейт под защитой от паники: раньше любая
+// кривая запись (заказ без суммы, короткий id) валила горутину опроса, и бот
+// молча переставал отвечать при живом бэкенде.
+func (b *Bot) processUpdate(upd Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("паника при обработке апдейта", slog.Any("panic", r), slog.Int("update_id", upd.UpdateID))
+		}
+	}()
+
+	switch {
+	case upd.Message != nil:
+		b.handleMessage(upd.Message)
+	case upd.CallbackQuery != nil:
+		b.handleCallback(upd.CallbackQuery)
+	}
 }
 
 func (b *Bot) WebhookHandler(w http.ResponseWriter, r *http.Request) {
@@ -163,12 +195,7 @@ func (b *Bot) StartPolling(ctx context.Context) {
 				}
 				for _, upd := range updates {
 					offset = upd.UpdateID + 1
-					switch {
-					case upd.Message != nil:
-						b.handleMessage(upd.Message)
-					case upd.CallbackQuery != nil:
-						b.handleCallback(upd.CallbackQuery)
-					}
+					b.processUpdate(upd)
 				}
 			}
 		}
@@ -293,7 +320,10 @@ func (b *Bot) handleOrderStart(ctx context.Context, chatID int64, from User, ord
 		deliveryIcon = "🔐"
 		deliveryLabel = "Активация на аккаунт"
 	}
-	price := fmt.Sprintf("%.0f ₽", *order.PaymentAmount)
+	price := "уточняется у менеджера"
+	if order.PaymentAmount != nil {
+		price = fmt.Sprintf("%.0f ₽", *order.PaymentAmount)
+	}
 	qty := ""
 	if order.Quantity > 1 {
 		qty = fmt.Sprintf("\n<b>Количество:</b> %d шт", order.Quantity)
@@ -312,7 +342,7 @@ func (b *Bot) handleOrderStart(ctx context.Context, chatID int64, from User, ord
 <b>💰 Сумма:</b> %s
 
 🆔 <b>Заказ #%s</b> создан!
-👨‍💼 Менеджер скоро свяжется с вами.`, typeIcon, p.Title, platform, typeLabel(p.Type), deliveryIcon, deliveryLabel, qty, price, orderIDStr[:8])
+👨‍💼 Менеджер скоро свяжется с вами.`, typeIcon, p.Title, platform, typeLabel(p.Type), deliveryIcon, deliveryLabel, qty, price, shortOrderID(orderIDStr))
 
 	buttons := b.orderActionButtons(orderIDStr)
 
@@ -416,15 +446,33 @@ func typeLabel(t domain.ProductType) string {
 	return string(t)
 }
 
-func (b *Bot) shopWebAppButton() map[string]any {
+// webAppButton открывает нужный экран внутри мини-аппа. Ссылку на TMA нельзя
+// слать текстом: Telegram отрисует её обычной ссылкой и уведёт во внешний браузер.
+func (b *Bot) webAppButton(text, path string) map[string]any {
 	return map[string]any{
-		"text":    "🛒 Открыть магазин",
-		"web_app": map[string]string{"url": b.tmaURL},
+		"text":    text,
+		"web_app": map[string]string{"url": strings.TrimRight(b.tmaURL, "/") + path},
 	}
 }
 
+func (b *Bot) shopWebAppButton() map[string]any {
+	return b.webAppButton("🛒 Открыть магазин", "")
+}
+
+// orderPath разворачивает короткий id из callback_data в полный, иначе
+// мини-апп откроется на несуществующем заказе.
+func (b *Bot) orderPath(orderShort string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if order, err := b.orderRepo.FindByIDPrefix(ctx, orderShort); err == nil {
+		return "/order/" + order.ID.String()
+	}
+	return "/orders"
+}
+
 func (b *Bot) orderActionButtons(orderID string) [][]map[string]any {
-	short := orderID[:8]
+	short := shortOrderID(orderID)
 	return [][]map[string]any{
 		{
 			{"text": "📋 Статус заказа", "callback_data": "status_" + short},
@@ -520,7 +568,7 @@ func (b *Bot) handleUserMessage(chatID int64, from User, text string) {
 
 	orderShort := "?"
 	if hasOrder && len(orderID) >= 8 {
-		orderShort = orderID[:8]
+		orderShort = shortOrderID(orderID)
 	}
 
 	username := from.Username
@@ -644,7 +692,7 @@ func (b *Bot) handleListCommand(adminChatID int64) {
 	for chatID, orderID := range b.orders {
 		short := "?"
 		if len(orderID) >= 8 {
-			short = orderID[:8]
+			short = shortOrderID(orderID)
 		}
 		lines = append(lines, fmt.Sprintf("• Заказ #%s — user:%d — /reply_%s", short, chatID, short))
 	}
@@ -665,7 +713,9 @@ func (b *Bot) handleCallback(cb *CallbackQuery) {
 		b.handleCancelCallback(chatID, strings.TrimPrefix(data, "cancel_"))
 	case strings.HasPrefix(data, "status_"):
 		orderShort := strings.TrimPrefix(data, "status_")
-		b.sendMessage(chatID, fmt.Sprintf("📋 Откройте приложение, чтобы увидеть статус заказа #%s:\n%s/order/%s", orderShort, b.tmaURL, orderShort))
+		b.sendMessageWithButtons(chatID,
+			fmt.Sprintf("📋 Статус заказа #%s", orderShort),
+			[][]map[string]any{{b.webAppButton("📋 Открыть заказ", b.orderPath(orderShort))}})
 	case strings.HasPrefix(data, "chat_"):
 		orderShort := strings.TrimPrefix(data, "chat_")
 		b.sendMessage(chatID, fmt.Sprintf("💬 Напишите ваше сообщение — менеджер ответит в ближайшее время.\n\nЗаказ #%s", orderShort))
@@ -675,7 +725,8 @@ func (b *Bot) handleCallback(cb *CallbackQuery) {
 		// Web App открывается через кнопку меню — не шлём ссылку в чат.
 		return
 	case data == "open_orders":
-		b.sendMessage(chatID, fmt.Sprintf("📋 Мои заказы:\n%s/orders", b.tmaURL))
+		b.sendMessageWithButtons(chatID, "📦 Ваши заказы",
+			[][]map[string]any{{b.webAppButton("📦 Открыть мои заказы", "/orders")}})
 	default:
 		b.sendMessage(chatID, "Команда не распознана")
 	}
@@ -763,9 +814,9 @@ func (b *Bot) sendPhoto(chatID int64, photoURL, caption string, buttons [][]map[
 	}
 
 	body := map[string]any{
-		"chat_id":   chatID,
-		"photo":     photoURL,
-		"caption":   caption,
+		"chat_id":    chatID,
+		"photo":      photoURL,
+		"caption":    caption,
 		"parse_mode": "HTML",
 	}
 

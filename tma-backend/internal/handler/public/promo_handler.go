@@ -2,11 +2,11 @@ package public
 
 import (
 	"encoding/json"
+	"github.com/google/uuid"
 	"net/http"
 	"time"
 	"tma-backend/internal/repository"
 	"tma-backend/internal/service"
-	"github.com/google/uuid"
 )
 
 type PromoHandler struct {
@@ -19,7 +19,7 @@ func NewPromoHandler(promoSvc *service.PromoService) *PromoHandler {
 
 func (h *PromoHandler) Validate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Code    string  `json:"code"`
+		Code     string  `json:"code"`
 		Subtotal float64 `json:"subtotal"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

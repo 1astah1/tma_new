@@ -10,8 +10,8 @@ import (
 )
 
 type AuthHandler struct {
-	authSvc     *service.AuthService
-	bruteForce  *middleware.BruteForceProtector
+	authSvc    *service.AuthService
+	bruteForce *middleware.BruteForceProtector
 }
 
 func NewAuthHandler(authSvc *service.AuthService, bruteForce *middleware.BruteForceProtector) *AuthHandler {

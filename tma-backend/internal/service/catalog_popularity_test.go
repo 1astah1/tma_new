@@ -54,7 +54,7 @@ func TestIsPopularFeedExcluded(t *testing.T) {
 		"9 500 coins call of duty: modern warfare": true,
 		"call of duty: black ops 7":                false,
 		"call of duty: modern warfare 4":           false,
-		"пакет 3 battlefield pro - battlefield 6":    true,
+		"пакет 3 battlefield pro - battlefield 6":  true,
 		"fortnite: 2400 v-bucks":                   true,
 		"007 first light":                          false,
 	}

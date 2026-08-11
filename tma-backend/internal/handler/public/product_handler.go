@@ -112,8 +112,8 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	type ProductDetail struct {
 		domain.Product
-		OrderCount        int               `json:"order_count"`
-		PlatformVariants  []PlatformVariant `json:"platform_variants,omitempty"`
+		OrderCount       int               `json:"order_count"`
+		PlatformVariants []PlatformVariant `json:"platform_variants,omitempty"`
 	}
 
 	detail := ProductDetail{Product: *product}

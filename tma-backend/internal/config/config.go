@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -33,9 +32,9 @@ type JWTConfig struct {
 }
 
 type TelegramConfig struct {
-	BotToken    string
-	WebhookURL  string
-	EncryptKey  string
+	BotToken   string
+	WebhookURL string
+	EncryptKey string
 }
 
 type AppConfig struct {
@@ -43,6 +42,7 @@ type AppConfig struct {
 	LogLevel    string
 	AdminURL    string
 	TMAURL      string
+	AutoMigrate bool
 }
 
 func getExecDir() string {
@@ -118,10 +118,13 @@ func Load() *Config {
 		},
 		UploadDir: getEnv("UPLOAD_DIR", filepath.Join(getExecDir(), "uploads")),
 		App: AppConfig{
-			Environment: getEnv("ENVIRONMENT", "development"),
-			LogLevel:    getEnv("LOG_LEVEL", "debug"),
+			// Дефолт production: незаданная переменная не должна включать
+			// dev-байпас авторизации и CORS "*".
+			Environment: getEnv("ENVIRONMENT", "production"),
+			LogLevel:    getEnv("LOG_LEVEL", "info"),
 			AdminURL:    getEnv("ADMIN_PANEL_URL", "http://localhost:5173"),
 			TMAURL:      getEnv("TMA_URL", "http://localhost:5173"),
+			AutoMigrate: getEnv("AUTO_MIGRATE", "true") != "false",
 		},
 	}
 }
@@ -137,15 +140,6 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
-		}
-	}
-	return fallback
-}
-
-func getInt(key string, fallback int) int {
-	if v := os.Getenv(key); v != "" {
-		if i, err := strconv.Atoi(v); err == nil {
-			return i
 		}
 	}
 	return fallback

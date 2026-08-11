@@ -53,7 +53,7 @@ func (v *VitrinaService) ComputeScore(product domain.Product, ctx ScoreContext) 
 	if product.ReleaseDate != nil && !product.ReleaseDate.IsZero() {
 		days := time.Since(product.ReleaseDate.UTC()).Hours() / 24
 		if days >= 0 && days <= 180 {
-			score += 35 - (days/180*35)
+			score += 35 - (days / 180 * 35)
 		} else if days < 0 && days >= -365 {
 			score += 30
 		}
@@ -95,9 +95,9 @@ func (v *VitrinaService) loadHomeCategoryPopularIDs(ctx context.Context) []uuid.
 	}
 	raw, _ := setting["value"].(string)
 	var categories []struct {
-		ID          string   `json:"id"`
-		SectionKey  string   `json:"section_key"`
-		ProductIDs  []string `json:"product_ids"`
+		ID         string   `json:"id"`
+		SectionKey string   `json:"section_key"`
+		ProductIDs []string `json:"product_ids"`
 	}
 	if json.Unmarshal([]byte(raw), &categories) != nil {
 		return nil

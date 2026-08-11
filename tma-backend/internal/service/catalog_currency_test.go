@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+)
 
 func TestConvertTRYToRUB(t *testing.T) {
 	tryRubMu.Lock()
@@ -24,71 +28,35 @@ func TestParseDisplayPriceTRY(t *testing.T) {
 	}
 }
 
-func TestXboxPriceAcceptsTRY(t *testing.T) {
-	product := xboxProduct{
-		DisplaySkuAvailabilities: []struct {
-			Sku struct {
-				MarketProperties []struct {
-					FirstAvailableDate string `json:"FirstAvailableDate"`
-				} `json:"MarketProperties"`
-				Properties struct {
-					IsPreOrder bool `json:"IsPreOrder"`
-				} `json:"Properties"`
-			} `json:"Sku"`
-			Availabilities []struct {
-				OrderManagementData *struct {
-					Price struct {
-						MSRP         float64 `json:"MSRP"`
-						ListPrice    float64 `json:"ListPrice"`
-						CurrencyCode string  `json:"CurrencyCode"`
-					} `json:"Price"`
-				} `json:"OrderManagementData"`
-			} `json:"Availabilities"`
-		}{
-			{
-				Availabilities: []struct {
-					OrderManagementData *struct {
-						Price struct {
-							MSRP         float64 `json:"MSRP"`
-							ListPrice    float64 `json:"ListPrice"`
-							CurrencyCode string  `json:"CurrencyCode"`
-						} `json:"Price"`
-					} `json:"OrderManagementData"`
-				}{
-					{
-						OrderManagementData: &struct {
-							Price struct {
-								MSRP         float64 `json:"MSRP"`
-								ListPrice    float64 `json:"ListPrice"`
-								CurrencyCode string  `json:"CurrencyCode"`
-							} `json:"Price"`
-						}{
-							Price: struct {
-								MSRP         float64 `json:"MSRP"`
-								ListPrice    float64 `json:"ListPrice"`
-								CurrencyCode string  `json:"CurrencyCode"`
-							}{ListPrice: 325, CurrencyCode: "TRY"},
-						},
-					},
-				},
-			},
-		},
+func xboxProductWithPrice(t *testing.T, listPrice float64, currency string) xboxProduct {
+	t.Helper()
+	raw := fmt.Sprintf(`{"DisplaySkuAvailabilities":[{"Availabilities":[{"OrderManagementData":{"Price":{"ListPrice":%v,"CurrencyCode":%q}}}]}]}`, listPrice, currency)
+	var product xboxProduct
+	if err := json.Unmarshal([]byte(raw), &product); err != nil {
+		t.Fatalf("unmarshal xbox product: %v", err)
 	}
-	tryRubMu.Lock()
-	old := tryRubRate
-	tryRubRate = 2.0
-	tryRubMu.Unlock()
-	defer func() {
-		tryRubMu.Lock()
-		tryRubRate = old
-		tryRubMu.Unlock()
-	}()
+	return product
+}
 
-	price, currency := xboxPrice(product)
-	if currency == nil || *currency != "TRY" {
-		t.Fatalf("expected TRY currency")
+// Xbox-каталог берётся только с рынка US: цена в USD пересчитывается множителем.
+func TestXboxPriceUsesUSD(t *testing.T) {
+	price, currency := xboxPrice(xboxProductWithPrice(t, 69.99, "USD"))
+	if currency == nil || *currency != "USD" {
+		t.Fatalf("expected USD currency, got %v", currency)
 	}
-	if price == nil || *price != 650 {
-		t.Fatalf("expected 650 RUB got %v", price)
+	if want := XboxUSAPrice(69.99); price == nil || *price != want {
+		t.Fatalf("expected %v RUB, got %v", want, price)
 	}
+}
+
+func TestXboxPriceIgnoresNonUSD(t *testing.T) {
+	price, currency := xboxProductPrice(t, "TRY")
+	if price != nil || currency != nil {
+		t.Fatalf("expected no price for non-USD market, got %v %v", price, currency)
+	}
+}
+
+func xboxProductPrice(t *testing.T, currency string) (*float64, *string) {
+	t.Helper()
+	return xboxPrice(xboxProductWithPrice(t, 325, currency))
 }

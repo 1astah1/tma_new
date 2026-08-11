@@ -28,8 +28,6 @@ Thumbs.db
 *.out
 tmp/
 logs/
-db-backup/
-monitoring/
 
 # Test data with potential secrets
 *_test.json
@@ -55,6 +53,9 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+
+# Vite cache
+.vite/
 
 # Temp & junk
 tmp-*.json

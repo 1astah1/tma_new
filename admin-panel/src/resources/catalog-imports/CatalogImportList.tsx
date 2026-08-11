@@ -17,6 +17,7 @@ import { Box, Card, CardContent, Chip, LinearProgress, Stack, Typography } from 
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import SyncIcon from '@mui/icons-material/Sync'
+import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck'
 import { CatalogWizard } from '../../components/CatalogWizard'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 
@@ -406,6 +407,27 @@ function ParserActions() {
     }
   }
 
+  const importWantedList = async () => {
+    if (!window.confirm('Пройти по списку игр и подтянуть из магазинов актуальные цены по гео, описания, картинки и разделы? Займёт несколько десятков минут.')) return
+    setLoading(true)
+    try {
+      const res = await fetch(`${apiUrl}/catalog-imports/import-wanted`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: '{}',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error?.message || 'Не удалось запустить импорт по списку')
+      setStatus(json)
+      notify('Импорт по списку запущен — следите за прогрессом выше', { type: 'success' })
+      refresh()
+    } catch (e: any) {
+      notify(e.message, { type: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const resetCatalog = async () => {
     if (!window.confirm('Удалить очередь импорта и все игровые товары без заказов? Игры с заказами будут скрыты.')) return
     setLoading(true)
@@ -728,6 +750,13 @@ function ParserActions() {
             color="error"
             variant="contained"
             startIcon={<DeleteSweepIcon />}
+          />
+          <Button
+            label="Импорт по списку игр"
+            onClick={importWantedList}
+            disabled={loading || status?.running}
+            variant="contained"
+            startIcon={<PlaylistAddCheckIcon />}
           />
           <Button
             label="Обновить PS/Xbox"

@@ -52,6 +52,9 @@ function AppRoutes() {
         <Route path="catalog" element={<CatalogPage />} />
         <Route path="product/:id" element={<ProductPage />} />
         <Route path="order/:id" element={<OrderStatusPage />} />
+        {/* Страховка от опечатки в ссылке: /orders/<id> вёл на «*» и молча
+            выкидывал на главную уже после того, как заказ создан. */}
+        <Route path="orders/:id" element={<OrderStatusPage />} />
         <Route path="orders" element={<OrdersHistoryPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="support" element={<SupportPage />} />

@@ -197,7 +197,7 @@ func (h *OrderHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 	handler.RespondJSON(w, http.StatusCreated, map[string]interface{}{
 		"orders":       orders,
 		"total_amount": totalAmount,
-		"order_ids":    func() []string {
+		"order_ids": func() []string {
 			ids := make([]string, len(orders))
 			for i, o := range orders {
 				ids[i] = o.ID.String()

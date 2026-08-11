@@ -20,7 +20,7 @@ type homeCategorySetting struct {
 	ImageURL    string   `json:"image_url"`
 	ProductIDs  []string `json:"product_ids"`
 	CatalogType string   `json:"catalog_type,omitempty"`
-	Kind        string   `json:"kind,omitempty"` // feed_section | tile
+	Kind        string   `json:"kind,omitempty"`        // feed_section | tile
 	SectionKey  string   `json:"section_key,omitempty"` // preorders | new_releases | popular
 	SortOrder   int      `json:"sort_order"`
 }

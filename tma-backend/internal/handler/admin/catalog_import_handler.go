@@ -19,13 +19,13 @@ import (
 )
 
 type CatalogImportHandler struct {
-	importRepo   *repository.CatalogImportRepo
-	productRepo  *repository.ProductRepo
-	productSvc   *service.ProductService
-	parserSvc    *service.CatalogParserService
-	curationSvc  *service.CatalogCurationService
-	rebuildSvc   *service.CatalogRebuildService
-	vitrinaSvc   *service.VitrinaService
+	importRepo  *repository.CatalogImportRepo
+	productRepo *repository.ProductRepo
+	productSvc  *service.ProductService
+	parserSvc   *service.CatalogParserService
+	curationSvc *service.CatalogCurationService
+	rebuildSvc  *service.CatalogRebuildService
+	vitrinaSvc  *service.VitrinaService
 }
 
 func NewCatalogImportHandler(importRepo *repository.CatalogImportRepo, productRepo *repository.ProductRepo, productSvc *service.ProductService, parserSvc *service.CatalogParserService, curationSvc *service.CatalogCurationService, rebuildSvc *service.CatalogRebuildService, vitrinaSvc *service.VitrinaService) *CatalogImportHandler {
@@ -191,6 +191,36 @@ func (h *CatalogImportHandler) RunParser(w http.ResponseWriter, r *http.Request)
 	handler.RespondJSON(w, http.StatusAccepted, h.parserSvc.Status())
 }
 
+// ImportWantedList — импорт по списку желаемых игр: цены по гео, описания,
+// картинки и раздел берутся из магазинов, список задаёт только состав.
+func (h *CatalogImportHandler) ImportWantedList(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	publish := func(ctx context.Context) error {
+		_, err := h.curationSvc.PublishWantedImports(ctx, 5000)
+		return err
+	}
+
+	if err := h.parserSvc.RunWantedImportAsync(r.Context(), req.Path, publish); err != nil {
+		handler.RespondError(w, http.StatusConflict, "IMPORT_FAILED", err.Error())
+		return
+	}
+	handler.RespondJSON(w, http.StatusAccepted, h.parserSvc.Status())
+}
+
+// WantedListReport — итог последнего прогона: что нашлось, что нет.
+func (h *CatalogImportHandler) WantedListReport(w http.ResponseWriter, r *http.Request) {
+	report, errText := service.LastWantedImportReport()
+	handler.RespondJSON(w, http.StatusOK, map[string]interface{}{
+		"report": report,
+		"error":  errText,
+		"status": h.parserSvc.Status(),
+	})
+}
+
 func (h *CatalogImportHandler) ParserStatus(w http.ResponseWriter, r *http.Request) {
 	handler.RespondJSON(w, http.StatusOK, h.parserSvc.Status())
 }
@@ -273,9 +303,9 @@ func (h *CatalogImportHandler) ImportPSStore(w http.ResponseWriter, r *http.Requ
 		)
 	}()
 	handler.RespondJSON(w, http.StatusAccepted, map[string]interface{}{
-		"status": "started",
-		"imported": 0,
-		"published": 0,
+		"status":          "started",
+		"imported":        0,
+		"published":       0,
 		"products_synced": 0,
 	})
 }

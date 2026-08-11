@@ -351,8 +351,8 @@ func (s *OrderService) CancelOrderByUser(ctx context.Context, orderID, userID uu
 	}
 
 	allowable := map[domain.OrderStatus]bool{
-		domain.OrderStatusNew:              true,
-		domain.OrderStatusWaitingPayment:   true,
+		domain.OrderStatusNew:                 true,
+		domain.OrderStatusWaitingPayment:      true,
 		domain.OrderStatusPaymentVerification: true,
 	}
 	if !allowable[order.Status] {
@@ -637,8 +637,8 @@ func (s *OrderService) SendChatMessage(ctx context.Context, orderID, senderID uu
 	}
 
 	allowable := map[domain.OrderStatus]bool{
-		domain.OrderStatusPaid:              true,
-		domain.OrderStatusWaitingActivation: true,
+		domain.OrderStatusPaid:                true,
+		domain.OrderStatusWaitingActivation:   true,
 		domain.OrderStatusAwaitingCredentials: true,
 		domain.OrderStatusCredentialsReceived: true,
 		domain.OrderStatusCredentialsInvalid:  true,

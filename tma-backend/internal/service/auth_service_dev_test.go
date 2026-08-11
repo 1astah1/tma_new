@@ -17,7 +17,7 @@ import (
 func TestAuthenticateUser_DevFallbackWithInvalidHash(t *testing.T) {
 	userRepo := &mocks.MockUserStore{}
 	cfg := &config.Config{
-		JWT: config.JWTConfig{Secret: "test-secret-key-for-testing-must-be-long-enough", AccessTTL: time.Hour},
+		JWT:      config.JWTConfig{Secret: "test-secret-key-for-testing-must-be-long-enough", AccessTTL: time.Hour},
 		Telegram: config.TelegramConfig{BotToken: "123456:ABC-DEF"},
 	}
 	svc := NewAuthService(cfg, userRepo, &mocks.MockAdminStore{})

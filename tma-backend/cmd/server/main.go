@@ -21,6 +21,7 @@ import (
 
 	"tma-backend/internal/bot"
 	"tma-backend/internal/config"
+	"tma-backend/internal/dbmigrate"
 	"tma-backend/internal/domain"
 	h "tma-backend/internal/handler"
 	"tma-backend/internal/handler/admin"
@@ -48,7 +49,14 @@ func main() {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	slog.Info("Connected to database", slog.String("database", cfg.Database.URL))
+	slog.Info("Connected to database")
+
+	if cfg.App.AutoMigrate {
+		if err := dbmigrate.Run(db); err != nil {
+			slog.Error("Failed to apply migrations", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}
 
 	// Repositories
 	userRepo := repository.NewUserRepo(db)
@@ -301,6 +309,8 @@ func main() {
 			r.Post("/catalog-imports/{id}/reject", catalogImportHandler.Reject)
 			r.Get("/catalog-parser/status", catalogImportHandler.ParserStatus)
 			r.Post("/catalog-parser/run", catalogImportHandler.RunParser)
+			r.Post("/catalog-imports/import-wanted", catalogImportHandler.ImportWantedList)
+			r.Get("/catalog-imports/wanted-report", catalogImportHandler.WantedListReport)
 			r.Post("/catalog-parser/reset", catalogImportHandler.ResetCatalog)
 			r.Post("/catalog-parser/activate-all-games", catalogImportHandler.ActivateAllGames)
 

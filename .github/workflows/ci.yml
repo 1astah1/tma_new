@@ -2,13 +2,13 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [master, main, develop]
   pull_request:
-    branches: [main]
+    branches: [master, main]
 
 env:
-  GO_VERSION: '1.22'
-  NODE_VERSION: '18'
+  GO_VERSION: '1.25'
+  NODE_VERSION: '20'
 
 jobs:
   lint-backend:
@@ -22,11 +22,17 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.59
-          working-directory: tma-backend
+      - name: gofmt
+        working-directory: tma-backend
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Не отформатировано:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        working-directory: tma-backend
+        run: go vet ./...
 
   test-backend:
     name: Test Backend
@@ -61,6 +67,9 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+
+      - name: Check migration versions are unique
+        run: ./scripts/check-migrations.sh
 
       - name: Run tests
         working-directory: tma-backend
@@ -140,7 +149,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: [build-backend, build-frontend, build-admin]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 

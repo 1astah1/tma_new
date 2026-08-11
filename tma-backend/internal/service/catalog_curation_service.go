@@ -14,23 +14,23 @@ import (
 )
 
 type CatalogCurationService struct {
-	imports *repository.CatalogImportRepo
+	imports  *repository.CatalogImportRepo
 	products *repository.ProductRepo
-	parser  *CatalogParserService
+	parser   *CatalogParserService
 }
 
 type CatalogCurationResult struct {
-	KeysUpdated           int64 `json:"keys_updated"`
-	ImportsRejected       int64 `json:"imports_rejected"`
-	ProductsDeleted       int64 `json:"products_deleted"`
-	ProductsHidden        int64 `json:"products_hidden"`
-	ProductsSynced        int64 `json:"products_synced"`
-	DescriptionsUpdated   int   `json:"descriptions_updated"`
-	Enriched              int   `json:"enriched"`
-	Published             int64 `json:"published"`
-	LinkedExisting        int64 `json:"linked_existing"`
-	Activated             int64 `json:"activated"`
-	Reclassified          bool  `json:"reclassified"`
+	KeysUpdated         int64 `json:"keys_updated"`
+	ImportsRejected     int64 `json:"imports_rejected"`
+	ProductsDeleted     int64 `json:"products_deleted"`
+	ProductsHidden      int64 `json:"products_hidden"`
+	ProductsSynced      int64 `json:"products_synced"`
+	DescriptionsUpdated int   `json:"descriptions_updated"`
+	Enriched            int   `json:"enriched"`
+	Published           int64 `json:"published"`
+	LinkedExisting      int64 `json:"linked_existing"`
+	Activated           int64 `json:"activated"`
+	Reclassified        bool  `json:"reclassified"`
 }
 
 func NewCatalogCurationService(imports *repository.CatalogImportRepo, products *repository.ProductRepo, parser *CatalogParserService) *CatalogCurationService {
@@ -44,7 +44,7 @@ func (s *CatalogCurationService) RefreshTitleKeys(ctx context.Context) (int64, e
 		return 0, err
 	}
 	for _, row := range rows {
-		key := NormalizeGameTitle(row.Title)
+		key := CatalogTitleKey(row.Title)
 		family := PlatformFamilyFromImport(row.Source, row.Platforms)
 		if key == "" {
 			continue
@@ -60,7 +60,7 @@ func (s *CatalogCurationService) RefreshTitleKeys(ctx context.Context) (int64, e
 		return updated, err
 	}
 	for _, row := range gameRows {
-		key := NormalizeGameTitle(row.Title)
+		key := CatalogTitleKey(row.Title)
 		if key == "" {
 			continue
 		}
@@ -101,15 +101,44 @@ func (s *CatalogCurationService) Deduplicate(ctx context.Context) (*CatalogCurat
 }
 
 func (s *CatalogCurationService) AutoPublishFresh(ctx context.Context, limit int) (*CatalogCurationResult, error) {
+	return s.publishSections(ctx, []string{"preorder", "new"}, limit, 300)
+}
+
+// PublishWantedImports публикует всё, что импортировано адресно по списку
+// желаемых игр, включая раздел «каталог»: AutoPublishFresh намеренно берёт
+// только предзаказы и новинки, а список хотим видеть целиком.
+func (s *CatalogCurationService) PublishWantedImports(ctx context.Context, limit int) (*CatalogCurationResult, error) {
+	result, err := s.publishSections(ctx, []string{"preorder", "new", "game"}, limit, 5000)
+	if err != nil {
+		return result, err
+	}
+
+	// Публикация создаёт только новые карточки. Существующие надо ещё и
+	// обновить, иначе повторный прогон не исправит ни цену, ни раздел.
+	synced, syncErr := s.products.SyncMetadataFromImports(ctx, MinPaidPriceRUB())
+	if syncErr != nil {
+		return result, syncErr
+	}
+	result.ProductsSynced += synced
+
+	if cards, cardErr := s.products.SyncCardFromImports(ctx); cardErr != nil {
+		return result, cardErr
+	} else {
+		result.ProductsSynced += cards
+	}
+	return result, nil
+}
+
+func (s *CatalogCurationService) publishSections(ctx context.Context, sections []string, limit, fallbackLimit int) (*CatalogCurationResult, error) {
 	if limit <= 0 {
-		limit = 300
+		limit = fallbackLimit
 	}
 	result, err := s.Deduplicate(ctx)
 	if err != nil {
 		return result, err
 	}
 
-	items, err := s.imports.ListPendingBySections(ctx, []string{"preorder", "new"}, limit)
+	items, err := s.imports.ListPendingBySections(ctx, sections, limit)
 	if err != nil {
 		return result, err
 	}
@@ -141,6 +170,11 @@ func (s *CatalogCurationService) AutoPublishFresh(ctx context.Context, limit int
 		}
 
 		price := EffectiveCatalogPriceRUB(&item)
+		if price <= 0 {
+			// Карточка с нулём вместо цены обманывает покупателя — ждём,
+			// пока в сторе появится цена, даже если это предзаказ.
+			continue
+		}
 		if price < MinPaidPriceRUB() && !IsPreorderCatalogItem(&item) {
 			continue
 		}

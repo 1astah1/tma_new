@@ -2,8 +2,8 @@ package service
 
 import (
 	"errors"
-	"tma-backend/internal/repository"
 	"github.com/google/uuid"
+	"tma-backend/internal/repository"
 )
 
 type PromoService struct {

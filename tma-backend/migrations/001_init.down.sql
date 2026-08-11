@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS admins CASCADE;
+DROP TABLE IF EXISTS settings CASCADE;
 DROP TABLE IF EXISTS admin_actions_log CASCADE;
 DROP TABLE IF EXISTS payment_transactions CASCADE;
 DROP TABLE IF EXISTS user_accounts CASCADE;
@@ -11,6 +13,8 @@ DROP TYPE IF EXISTS product_type;
 DROP TYPE IF EXISTS product_status;
 DROP TYPE IF EXISTS order_status;
 DROP TYPE IF EXISTS delivery_method;
+DROP TYPE IF EXISTS payment_method;
+DROP TYPE IF EXISTS key_status;
 DROP TYPE IF EXISTS transaction_status;
 DROP TYPE IF EXISTS sender_type;
 DROP TYPE IF EXISTS changed_by_type;

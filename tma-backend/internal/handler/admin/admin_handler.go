@@ -193,8 +193,8 @@ func (h *AdminUserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		IsBanned    *bool   `json:"is_banned"`
-		AdminNotes  *string `json:"admin_notes"`
+		IsBanned   *bool   `json:"is_banned"`
+		AdminNotes *string `json:"admin_notes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		handler.RespondError(w, http.StatusBadRequest, "INVALID_INPUT", "Invalid JSON")

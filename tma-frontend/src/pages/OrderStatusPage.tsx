@@ -7,9 +7,9 @@ import { StatusBadge } from '../components/ui/StatusBadge'
 import { OrderProgressCard } from '../components/order/OrderProgressCard'
 import { OrderChat } from '../components/order/OrderChat'
 import { formatPrice } from '../utils/format'
-import { openManagerOrderChat } from '../utils/managerChat'
+import { buildPurchaseRequestText, openManagerRequest } from '../utils/managerChat'
 import { useShopSettings } from '../hooks/useContent'
-import { isOrderCancelled, isOrderCompleted } from '../utils/orderStatus'
+import { getDisplayStatusLabel, isOrderCancelled, isOrderCompleted } from '../utils/orderStatus'
 import { OrderStatus } from '../types/order'
 
 export function OrderStatusPage() {
@@ -49,7 +49,24 @@ export function OrderStatusPage() {
         </div>
 
         {!cancelled ? (
-          <Button fullWidth size="lg" onClick={() => openManagerOrderChat(order.id)}>
+          <Button
+            fullWidth
+            size="lg"
+            onClick={() =>
+              openManagerRequest(
+                shopSettings?.manager_url,
+                buildPurchaseRequestText({
+                  title: order.product?.title ?? 'заказ',
+                  lines: [
+                    { label: '🆔 Заказ', value: `#${order.id.slice(0, 8)}` },
+                    { label: '📌 Статус', value: getDisplayStatusLabel(order.status as OrderStatus) },
+                  ],
+                  total: order.payment_amount ? formatPrice(order.payment_amount) : undefined,
+                  imageUrl: order.product?.image_url,
+                }),
+              )
+            }
+          >
             💬 Написать менеджеру в Telegram
           </Button>
         ) : null}

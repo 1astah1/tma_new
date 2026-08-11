@@ -116,10 +116,10 @@ func TestCancelOrder_WithLegacyKeyID(t *testing.T) {
 	reason := "Customer request"
 
 	order := &domain.Order{
-		ID:      orderID,
-		Status:  domain.OrderStatusPaid,
-		KeyID:   &keyID,
-		UserID:  uuid.New(),
+		ID:     orderID,
+		Status: domain.OrderStatusPaid,
+		KeyID:  &keyID,
+		UserID: uuid.New(),
 	}
 
 	ctx := context.Background()
@@ -149,10 +149,10 @@ func TestCancelOrder_NoKey(t *testing.T) {
 	reason := "Customer request"
 
 	order := &domain.Order{
-		ID:      orderID,
-		Status:  domain.OrderStatusWaitingPayment,
-		KeyID:   nil,
-		UserID:  uuid.New(),
+		ID:     orderID,
+		Status: domain.OrderStatusWaitingPayment,
+		KeyID:  nil,
+		UserID: uuid.New(),
 	}
 
 	ctx := context.Background()

@@ -23,10 +23,11 @@ import (
 	"tma-backend/internal/repository"
 )
 
+// STORE-MSF75508-NEWRELEASE Sony удалила — контейнер отдаёт 404,
+// новинки и так приходят из FULLGAMES.
 var psStoreContainers = []string{
 	"STORE-MSF75508-FULLGAMES",
 	"STORE-MSF75508-COMINGSOON",
-	"STORE-MSF75508-NEWRELEASE",
 }
 
 var xboxBrowseTemplates = []string{
@@ -111,7 +112,7 @@ func (s *CatalogParserService) proxyClient(ctx context.Context) *http.Client {
 				s.proxyClientVal = &http.Client{
 					Timeout: 25 * time.Second,
 					Transport: &http.Transport{
-						DialContext:     cd.DialContext,
+						DialContext:       cd.DialContext,
 						DisableKeepAlives: true,
 					},
 				}
@@ -322,12 +323,12 @@ type psStoreResponse struct {
 }
 
 type psStoreItem struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"long_desc"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"long_desc"`
 	ProviderName string `json:"provider_name"`
 	ReleaseDate  string `json:"release_date"`
-	Images      []struct {
+	Images       []struct {
 		URL  string      `json:"url"`
 		Type interface{} `json:"type"`
 	} `json:"images"`
@@ -341,6 +342,10 @@ type psStoreItem struct {
 		} `json:"entitlements"`
 	} `json:"skus"`
 	PlayablePlatform []string `json:"playable_platform"`
+	TopCategory      string   `json:"top_category"`
+	GameContentTypes []struct {
+		Key string `json:"key"`
+	} `json:"gameContentTypesList"`
 }
 
 func (s *CatalogParserService) importPSStore(ctx context.Context, _ bool) (int, error) {
@@ -571,7 +576,10 @@ func (s *CatalogParserService) collectXboxProductIDs(body string, seen map[strin
 }
 
 func (s *CatalogParserService) collectXboxSearchIDs(ctx context.Context, queries []string, seen map[string]bool) int {
-	type searchJob struct{ query string; page int }
+	type searchJob struct {
+		query string
+		page  int
+	}
 	jobs := make([]searchJob, 0, len(queries)*2)
 	for _, query := range queries {
 		jobs = append(jobs, searchJob{query: query, page: 1})
@@ -710,8 +718,8 @@ type xboxLocalizedProperty struct {
 }
 
 type xboxProduct struct {
-	ProductID           string `json:"ProductId"`
-	AllowedPlatforms    []struct {
+	ProductID        string `json:"ProductId"`
+	AllowedPlatforms []struct {
 		PlatformName string `json:"PlatformName"`
 	} `json:"AllowedPlatforms"`
 	Properties struct {
@@ -720,10 +728,10 @@ type xboxProduct struct {
 			Value string `json:"Value"`
 		} `json:"Attributes"`
 	} `json:"Properties"`
-	MarketProperties    []struct {
+	MarketProperties []struct {
 		OriginalReleaseDate string `json:"OriginalReleaseDate"`
 	} `json:"MarketProperties"`
-	LocalizedProperties []xboxLocalizedProperty `json:"LocalizedProperties"`
+	LocalizedProperties      []xboxLocalizedProperty `json:"LocalizedProperties"`
 	DisplaySkuAvailabilities []struct {
 		Sku struct {
 			MarketProperties []struct {
