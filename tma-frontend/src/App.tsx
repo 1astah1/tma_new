@@ -14,7 +14,13 @@ import { SupportPage } from './pages/SupportPage'
 import { RulesPage } from './pages/RulesPage'
 import { CartPage } from './pages/CartPage'
 import { WishlistPage } from './pages/WishlistPage'
-import { AdminPage } from './pages/AdminPage'
+import { AdminHome } from './pages/admin/AdminHome'
+import { AdminOrders } from './pages/admin/AdminOrders'
+import { AdminCatalog } from './pages/admin/AdminCatalog'
+import { AdminProducts } from './pages/admin/AdminProducts'
+import { AdminSettings } from './pages/admin/AdminSettings'
+import { AdminUsers } from './pages/admin/AdminUsers'
+import { AdminPromos } from './pages/admin/AdminPromos'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { ToastProvider } from './components/ui/Toast'
 
@@ -62,7 +68,13 @@ function AppRoutes() {
         <Route path="rules" element={<RulesPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="wishlist" element={<WishlistPage />} />
-        <Route path="manage" element={<AdminPage />} />
+        <Route path="manage" element={<AdminHome />} />
+        <Route path="manage/orders" element={<AdminOrders />} />
+        <Route path="manage/catalog" element={<AdminCatalog />} />
+        <Route path="manage/products" element={<AdminProducts />} />
+        <Route path="manage/settings" element={<AdminSettings />} />
+        <Route path="manage/users" element={<AdminUsers />} />
+        <Route path="manage/promos" element={<AdminPromos />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

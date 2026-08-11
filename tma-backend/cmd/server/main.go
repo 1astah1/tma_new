@@ -270,6 +270,40 @@ func main() {
 
 			tmaDashboard := admin.NewDashboardHandler(orderSvc, catalogImportRepo)
 			r.Get("/dashboard", tmaDashboard.GetStats)
+
+			tmaProducts := admin.NewAdminProductHandler(productSvc, productRepo, catalogImportRepo)
+			r.Get("/products", tmaProducts.List)
+			r.Get("/products/{id}", tmaProducts.GetByID)
+			r.Put("/products/{id}", tmaProducts.Update)
+			r.Delete("/products/{id}", tmaProducts.Delete)
+
+			tmaSettings := admin.NewSettingsHandler(settingsRepo)
+			r.Get("/settings", tmaSettings.Get)
+			r.Put("/settings", tmaSettings.Upsert)
+			r.Get("/settings/pricing-preview", tmaSettings.PricingPreview)
+
+			tmaUsers := admin.NewAdminUserHandler(userRepo, adminRepo, accountRepo)
+			r.Get("/users", tmaUsers.ListUsers)
+			r.Get("/users/{id}", tmaUsers.GetUser)
+			r.Patch("/users/{id}", tmaUsers.UpdateUser)
+			r.Get("/logs", tmaUsers.GetLogs)
+
+			tmaPromos := admin.NewPromoHandler(promoSvc)
+			r.Get("/promos", tmaPromos.List)
+			r.Post("/promos", tmaPromos.Create)
+			r.Put("/promos/{id}", tmaPromos.Update)
+			r.Delete("/promos/{id}", tmaPromos.Delete)
+
+			tmaCatalog := admin.NewCatalogImportHandler(catalogImportRepo, productRepo, productSvc, catalogParserSvc, catalogCurationSvc, catalogRebuildSvc, vitrinaSvc)
+			r.Get("/catalog-imports/summary", tmaCatalog.Summary)
+			r.Post("/catalog-imports/import-wanted", tmaCatalog.ImportWantedList)
+			r.Get("/catalog-imports/wanted-report", tmaCatalog.WantedListReport)
+			r.Get("/catalog-parser/status", tmaCatalog.ParserStatus)
+			r.Post("/catalog-imports/auto-publish-fresh", tmaCatalog.AutoPublishFresh)
+			r.Post("/catalog-imports/deduplicate", tmaCatalog.Deduplicate)
+
+			tmaBroadcast := admin.NewBroadcastHandler(userRepo, notifSvc)
+			r.Post("/broadcast", tmaBroadcast.Send)
 		})
 
 		// Public FAQ (no auth required)

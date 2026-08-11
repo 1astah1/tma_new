@@ -1,21 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useProfile } from '../hooks/useProfile'
-import { Header } from '../components/layout/Header'
-import { Button } from '../components/ui/Button'
-import { StatusBadge } from '../components/ui/StatusBadge'
-import { useToast } from '../components/ui/Toast'
-import { useGoBack } from '../hooks/useGoBack'
-import { formatPrice } from '../utils/format'
-import { Order, OrderStatus, statusLabels } from '../types/order'
+import { useProfile } from '../../hooks/useProfile'
+import { AdminGuard } from './AdminGuard'
+import { Button } from '../../components/ui/Button'
+import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useToast } from '../../components/ui/Toast'
+import { useGoBack } from '../../hooks/useGoBack'
+import { formatPrice } from '../../utils/format'
+import { Order, OrderStatus, statusLabels } from '../../types/order'
 import {
   getAdminOrders,
   getAdminStats,
   updateAdminOrderStatus,
   getAdminOrderChat,
   sendAdminOrderMessage,
-} from '../services/tmaAdmin.service'
+} from '../../services/tmaAdmin.service'
 
 /** Статусы, которые менеджер ставит руками чаще всего. */
 const QUICK_STATUSES: OrderStatus[] = [
@@ -34,17 +33,10 @@ const FILTERS: { id: string; label: string }[] = [
   { id: 'COMPLETED', label: 'Готовы' },
 ]
 
-export function AdminPage() {
-  const nav = useNavigate()
+export function AdminOrders() {
   const goBack = useGoBack()
-  const { data: profile, isLoading: profileLoading } = useProfile()
+  const { data: profile } = useProfile()
   const isAdmin = !!profile?.is_admin
-
-  // Покупателю тут делать нечего: данные и так закрыты на сервере, но и пустой
-  // каркас экрана показывать незачем.
-  useEffect(() => {
-    if (!profileLoading && profile && !isAdmin) nav('/', { replace: true })
-  }, [profileLoading, profile, isAdmin, nav])
 
   const toast = useToast()
   const queryClient = useQueryClient()
@@ -93,28 +85,16 @@ export function AdminPage() {
 
   const totals = useMemo(
     () => [
-      { label: 'Заказов сегодня', value: stats?.orders_today ?? 0 },
-      { label: 'Всего заказов', value: stats?.orders_total ?? orders.length },
-      { label: 'Ждут действия', value: stats?.pending_orders ?? 0 },
+      { label: 'Сегодня', value: stats?.orders_today ?? 0 },
+      { label: 'Всего', value: stats?.total_orders ?? orders.length },
+      { label: 'Ждут оплаты', value: stats?.waiting_payment ?? 0 },
     ],
     [stats, orders.length],
   )
 
-  if (!isAdmin) {
-    return (
-      <div className="pb-page">
-        <Header title="" onBack={goBack} />
-        <div className="p-10 text-center text-[var(--tg-hint)]">
-          {profileLoading ? 'Загрузка…' : 'Раздел доступен только менеджерам'}
-        </div>
-      </div>
-    )
-  }
-
   if (openOrder) {
     return (
-      <div className="pb-page">
-        <Header title={`Заказ #${openOrder.id.slice(0, 8)}`} onBack={() => setOpenOrder(null)} />
+      <AdminGuard title={`Заказ #${openOrder.id.slice(0, 8)}`} onBack={() => setOpenOrder(null)}>
         <div className="space-y-4 p-4">
           <div className="rounded-2xl border border-white/10 bg-[#141414] p-4">
             <div className="mb-2 flex items-center justify-between">
@@ -179,13 +159,12 @@ export function AdminPage() {
             </div>
           </div>
         </div>
-      </div>
+      </AdminGuard>
     )
   }
 
   return (
-    <div className="pb-page">
-      <Header title="Управление заказами" onBack={goBack} />
+    <AdminGuard title="Заказы" onBack={goBack}>
       <div className="space-y-4 p-4">
         <div className="grid grid-cols-3 gap-2">
           {totals.map((item) => (
@@ -237,6 +216,6 @@ export function AdminPage() {
           </div>
         )}
       </div>
-    </div>
+    </AdminGuard>
   )
 }
