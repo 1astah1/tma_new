@@ -31,6 +31,7 @@ func main() {
 	reportPath := flag.String("report", "", "куда сохранить JSON-отчёт")
 	publish := flag.Bool("publish", true, "публиковать найденное в каталог")
 	fixTitles := flag.Bool("fix-titles", false, "только привести названия карточек к канону, без обхода магазинов")
+	publishOnly := flag.Bool("publish-only", false, "только опубликовать уже импортированное, без обхода магазинов")
 	audit := flag.Bool("audit", false, "проверить, что карточки ведут на саму игру, а не на дополнение")
 	auditApply := flag.Bool("audit-apply", false, "вместе с -audit: скрыть найденные неверные карточки")
 	flag.Parse()
@@ -86,6 +87,24 @@ func main() {
 
 	parser := service.NewCatalogParserService(importRepo, settingsRepo)
 	curation := service.NewCatalogCurationService(importRepo, productRepo, parser)
+
+	if *publishOnly {
+		if fixed, err := curation.RecanonicalizeProductTitles(ctx); err == nil && fixed > 0 {
+			slog.Info("названия карточек приведены к канону", slog.Int64("исправлено", fixed))
+		}
+		result, err := curation.PublishWantedImports(ctx, 5000)
+		if err != nil {
+			slog.Error("публикация не удалась", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		slog.Info("опубликовано",
+			slog.Int64("новых_карточек", result.Published),
+			slog.Int64("привязано_к_существующим", result.LinkedExisting),
+			slog.Int64("обновлено", result.ProductsSynced),
+			slog.Int64("отклонено", result.ImportsRejected),
+		)
+		return
+	}
 
 	if *audit || *auditApply {
 		report, err := curation.AuditCardMatches(ctx, *auditApply)

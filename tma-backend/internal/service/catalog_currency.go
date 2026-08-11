@@ -104,6 +104,9 @@ func parseDisplayPriceTRY(display string) float64 {
 	display = strings.ReplaceAll(display, "₺", "")
 	display = strings.ReplaceAll(display, "\u00a0", "")
 	display = strings.ReplaceAll(display, " ", "")
+	// «3.199,00 TL»: точка — разделитель тысяч, запятая — дробная часть.
+	// Старый API отдавал цены без тысяч, поэтому раньше это не всплывало.
+	display = strings.ReplaceAll(display, ".", "")
 	display = strings.ReplaceAll(display, ",", ".")
 	match := regexp.MustCompile(`[\d.]+`).FindString(display)
 	if match == "" {

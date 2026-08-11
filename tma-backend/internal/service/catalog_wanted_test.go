@@ -467,3 +467,23 @@ func TestCrossGenBundleIsNotDLC(t *testing.T) {
 		}
 	}
 }
+
+// «Cult of the Lamb - Sinful Pack» на Xbox стоит 279 ₽ против 3217 ₽ за
+// издание на PS — это докупка, а не игра.
+func TestMatchProblemCatchesPackSuffix(t *testing.T) {
+	for _, pair := range [][2]string{
+		{"Cult of the Lamb: Sinful", "Cult of the Lamb - Sinful Pack"},
+		{"Cult of the Lamb: Unholy", "Cult of the Lamb - Unholy Pack Bundle"},
+	} {
+		if matchProblem(pair[0], pair[1]) == "" {
+			t.Errorf("докупка не поймана: %q → %q", pair[0], pair[1])
+		}
+	}
+}
+
+// Кросс-ген издание при этом остаётся игрой.
+func TestCrossGenStillPasses(t *testing.T) {
+	if got := matchProblem("Call of Duty: Black Ops 7", "Call of Duty®: Black Ops 7 - Набор Cross-Gen"); got != "" {
+		t.Fatalf("кросс-ген издание помечено как докупка: %s", got)
+	}
+}

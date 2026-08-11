@@ -511,6 +511,10 @@ END, vitrina_score DESC`, titleKey)
 	return products, nil
 }
 
+// FindByTitleKeyPlatform ищет только среди активных карточек. Скрытая карточка
+// (например, спрятанная аудитом за то, что вела на другую игру) не должна
+// перехватывать импорт правильной позиции — иначе игра навсегда останется без
+// этой платформы.
 func (r *ProductRepo) FindByTitleKeyPlatform(ctx context.Context, titleKey string, platform domain.Platform) (*domain.Product, error) {
 	if titleKey == "" {
 		return nil, sql.ErrNoRows
@@ -518,8 +522,8 @@ func (r *ProductRepo) FindByTitleKeyPlatform(ctx context.Context, titleKey strin
 	var p domain.Product
 	err := r.db.GetContext(ctx, &p, `
 SELECT * FROM products
-WHERE type = 'game' AND title_key = $1 AND platform = $2
-ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, updated_at DESC
+WHERE type = 'game' AND title_key = $1 AND platform = $2 AND status = 'active'
+ORDER BY updated_at DESC
 LIMIT 1`, titleKey, platform)
 	if err != nil {
 		return nil, err

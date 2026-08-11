@@ -60,3 +60,31 @@ func xboxProductPrice(t *testing.T, currency string) (*float64, *string) {
 	t.Helper()
 	return xboxPrice(xboxProductWithPrice(t, 325, currency))
 }
+
+// Со страницы магазина цены приходят с разделителем тысяч, из старого API —
+// без него. Разбирать надо оба вида.
+func TestParseDisplayPriceTRYWithThousands(t *testing.T) {
+	cases := map[string]float64{
+		"849,00 TL":    849,
+		"3.199,00 TL":  3199,
+		"4.399,00 TL":  4399,
+		"12.500,50 TL": 12500.5,
+	}
+	for raw, want := range cases {
+		if got := parseDisplayPriceTRY(raw); got != want {
+			t.Errorf("parseDisplayPriceTRY(%q) = %v, ожидалось %v", raw, got, want)
+		}
+	}
+}
+
+func TestParseDisplayPriceUAHWithSpaces(t *testing.T) {
+	cases := map[string]float64{
+		"UAH 194,00":   194,
+		"UAH 3 399,00": 3399,
+	}
+	for raw, want := range cases {
+		if got := parseDisplayPriceUAH(raw); got != want {
+			t.Errorf("parseDisplayPriceUAH(%q) = %v, ожидалось %v", raw, got, want)
+		}
+	}
+}

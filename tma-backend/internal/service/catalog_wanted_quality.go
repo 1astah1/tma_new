@@ -331,4 +331,5 @@ var dlcMarkerTokens = map[string]bool{
 	"улучшение": true, "upgrade": true, "boost": true, "бустер": true,
 	"валюта": true, "currency": true, "credits": true, "кредитов": true,
 	"appearance": true, "внешний": true, "vip": true, "battle": true,
+	"pack": true, "пак": true, "bundle": true,
 }

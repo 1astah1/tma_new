@@ -432,12 +432,26 @@ func (s *CatalogParserService) catalogImportFromPS(ctx context.Context, game psS
 	if !s.lightImport {
 		priceUA = s.fetchPSStorePriceUA(ctx, game.ID)
 	}
+
+	// У предзаказов и части новинок старый API молчит про цену, хотя на сайте
+	// магазина она есть. Дочитываем со страницы товара, иначе игра не попадёт
+	// в каталог вовсе.
+	pageRelease := time.Time{}
+	if priceTR == nil && !s.lightImport {
+		priceTR, pageRelease = s.psPageTurkeyPrice(ctx, game.ID)
+	}
+	if priceUA == nil && !s.lightImport {
+		priceUA = s.psPageUkrainePrice(ctx, game.ID)
+	}
 	display := ""
 	if game.DefaultSku != nil {
 		display = game.DefaultSku.DisplayPrice
 	}
 	raw, _ := json.Marshal(game)
 	releaseAt := parseReleaseDate(game.ReleaseDate)
+	if releaseAt.IsZero() && !pageRelease.IsZero() {
+		releaseAt = pageRelease
+	}
 	isPreorder := psIsPreorder(game, releaseAt)
 
 	// Build prices JSON: Turkey nominal, Ukraine UAH

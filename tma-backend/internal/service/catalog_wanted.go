@@ -165,8 +165,8 @@ var (
 	wantedYearRe = regexp.MustCompile(`\((19|20)\d{2}\)`)
 	// Слова издания отдельным токеном: регексп с \b кириллицу не ловит,
 	// в RE2 граница слова определяется только по ASCII.
-	wantedEditionTokenRe = regexp.MustCompile(`(?i)^(standard|standart|deluxe|ultimate|premium|gold|complete|goty|bundle|edition|s[uü]r[uü]m[uü]*|paket\p{L}*|dijital|digital|sayisal|sayısal|pakiet|eksiksiz|koleksiyon\p{L}*|konsol|console|консол\p{L}*|alt[ıi]n|[öo]zel|издани\p{L}*|версия|версии|набор|полн\p{L}*|золот\p{L}*|расширенн\p{L}*|коллекционн\p{L}*|юбилейн\p{L}*|подарочн\p{L}*|делюкс)$`)
-	wantedEditionRe      = regexp.MustCompile(`(?i)\b(standard|standart|deluxe|ultimate|premium|gold|complete|goty|cross[- ]?gen|bundle|edition|s[uü]r[uü]m[uü]*|paket(i|leri)?|dijital|digital|sayisal|sayısal|pakiet|eksiksiz|koleksiyon[ual]*|konsol|console|консол\p{L}*|alt[ıi]n|[öo]zel|издани\p{L}*|версия|набор|полн\p{L}*|золот\p{L}*|расширенн\p{L}*|коллекционн\p{L}*|юбилейн\p{L}*|pack|definitive|anniversary|collection)\b`)
+	wantedEditionTokenRe = regexp.MustCompile(`(?i)^(standard|standart|deluxe|ultimate|premium|gold|complete|goty|edition|s[uü]r[uü]m[uü]*|paket\p{L}*|dijital|digital|sayisal|sayısal|pakiet|eksiksiz|koleksiyon\p{L}*|konsol|console|консол\p{L}*|alt[ıi]n|[öo]zel|издани\p{L}*|версия|версии|набор|полн\p{L}*|золот\p{L}*|расширенн\p{L}*|коллекционн\p{L}*|юбилейн\p{L}*|подарочн\p{L}*|делюкс)$`)
+	wantedEditionRe      = regexp.MustCompile(`(?i)\b(standard|standart|deluxe|ultimate|premium|gold|complete|goty|cross[- ]?gen|bundle|edition|s[uü]r[uü]m[uü]*|paket(i|leri)?|dijital|digital|sayisal|sayısal|pakiet|eksiksiz|koleksiyon[ual]*|konsol|console|консол\p{L}*|alt[ıi]n|[öo]zel|издани\p{L}*|версия|набор|полн\p{L}*|золот\p{L}*|расширенн\p{L}*|коллекционн\p{L}*|юбилейн\p{L}*|definitive|anniversary|collection)\b`)
 )
 
 var romanValues = map[string]string{
