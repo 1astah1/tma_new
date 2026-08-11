@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useProfile } from '../hooks/useProfile'
 import { Header } from '../components/layout/Header'
 import { Button } from '../components/ui/Button'
 import { StatusBadge } from '../components/ui/StatusBadge'
@@ -33,24 +35,39 @@ const FILTERS: { id: string; label: string }[] = [
 ]
 
 export function AdminPage() {
+  const nav = useNavigate()
   const goBack = useGoBack()
+  const { data: profile, isLoading: profileLoading } = useProfile()
+  const isAdmin = !!profile?.is_admin
+
+  // Покупателю тут делать нечего: данные и так закрыты на сервере, но и пустой
+  // каркас экрана показывать незачем.
+  useEffect(() => {
+    if (!profileLoading && profile && !isAdmin) nav('/', { replace: true })
+  }, [profileLoading, profile, isAdmin, nav])
+
   const toast = useToast()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('')
   const [openOrder, setOpenOrder] = useState<Order | null>(null)
   const [message, setMessage] = useState('')
 
-  const { data: stats } = useQuery({ queryKey: ['tma-admin-stats'], queryFn: getAdminStats })
+  const { data: stats } = useQuery({
+    queryKey: ['tma-admin-stats'],
+    queryFn: getAdminStats,
+    enabled: isAdmin,
+  })
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['tma-admin-orders', filter],
     queryFn: () => getAdminOrders(filter || undefined),
+    enabled: isAdmin,
     refetchInterval: 30000,
   })
 
   const { data: chat = [] } = useQuery({
     queryKey: ['tma-admin-chat', openOrder?.id],
     queryFn: () => getAdminOrderChat(openOrder!.id),
-    enabled: !!openOrder,
+    enabled: isAdmin && !!openOrder,
     refetchInterval: 15000,
   })
 
@@ -82,6 +99,17 @@ export function AdminPage() {
     ],
     [stats, orders.length],
   )
+
+  if (!isAdmin) {
+    return (
+      <div className="pb-page">
+        <Header title="" onBack={goBack} />
+        <div className="p-10 text-center text-[var(--tg-hint)]">
+          {profileLoading ? 'Загрузка…' : 'Раздел доступен только менеджерам'}
+        </div>
+      </div>
+    )
+  }
 
   if (openOrder) {
     return (
