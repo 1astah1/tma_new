@@ -21,6 +21,7 @@ import { AdminProducts } from './pages/admin/AdminProducts'
 import { AdminSettings } from './pages/admin/AdminSettings'
 import { AdminUsers } from './pages/admin/AdminUsers'
 import { AdminPromos } from './pages/admin/AdminPromos'
+import { AdminStaff } from './pages/admin/AdminStaff'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { ToastProvider } from './components/ui/Toast'
 
@@ -75,6 +76,7 @@ function AppRoutes() {
         <Route path="manage/settings" element={<AdminSettings />} />
         <Route path="manage/users" element={<AdminUsers />} />
         <Route path="manage/promos" element={<AdminPromos />} />
+        <Route path="manage/staff" element={<AdminStaff />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

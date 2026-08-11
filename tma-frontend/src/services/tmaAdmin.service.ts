@@ -151,3 +151,40 @@ export async function sendBroadcast(message: string) {
   const { data } = await api.post(`${base}/broadcast`, { message })
   return data
 }
+
+// ─── команда ───
+export type AdminStaff = {
+  id: string
+  telegram_id: number
+  username: string
+  roles: string[]
+  is_active: boolean
+}
+
+export const ADMIN_ROLES: { id: string; label: string; hint: string }[] = [
+  { id: 'super_admin', label: 'Владелец', hint: 'всё, включая состав команды' },
+  { id: 'game_manager', label: 'Каталог', hint: 'товары и цены' },
+  { id: 'activation_admin', label: 'Выдача', hint: 'активации и ключи' },
+  { id: 'support', label: 'Поддержка', hint: 'чаты с покупателями' },
+  { id: 'finance', label: 'Финансы', hint: 'оплаты и возвраты' },
+]
+
+export async function getAdminStaff() {
+  const { data } = await api.get(`${base}/admins`)
+  return unwrapList<AdminStaff>(data)
+}
+
+export async function createAdminStaff(payload: {
+  telegram_id: number
+  username: string
+  password: string
+  roles: string[]
+}) {
+  const { data } = await api.post(`${base}/admins`, payload)
+  return data
+}
+
+export async function updateAdminStaff(id: string, patch: Partial<{ roles: string[]; is_active: boolean }>) {
+  const { data } = await api.put(`${base}/admins/${id}`, patch)
+  return data
+}

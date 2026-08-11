@@ -304,6 +304,14 @@ func main() {
 
 			tmaBroadcast := admin.NewBroadcastHandler(userRepo, notifSvc)
 			r.Post("/broadcast", tmaBroadcast.Send)
+
+			// Состав команды правит только владелец.
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.SuperAdminOnly)
+				r.Get("/admins", tmaUsers.ListAdmins)
+				r.Post("/admins", tmaUsers.CreateAdmin)
+				r.Put("/admins/{id}", tmaUsers.UpdateAdmin)
+			})
 		})
 
 		// Public FAQ (no auth required)

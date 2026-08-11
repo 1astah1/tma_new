@@ -12,6 +12,7 @@ const SECTIONS = [
   { path: '/manage/settings', icon: '⚙️', title: 'Настройки', hint: 'Реквизиты и наценки' },
   { path: '/manage/users', icon: '👥', title: 'Покупатели', hint: 'Блокировки' },
   { path: '/manage/promos', icon: '🎟', title: 'Промокоды', hint: 'Скидки' },
+  { path: '/manage/staff', icon: '🧑‍💼', title: 'Команда', hint: 'Админы и менеджеры' },
 ]
 
 export function AdminHome() {

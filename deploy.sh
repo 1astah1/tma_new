@@ -9,6 +9,12 @@ set -e
 HOST=${1:-root@51.38.154.221}
 TARGET=/opt/tma
 
+# Пароль сервера берётся из окружения: SSHPASS=... ./deploy.sh
+SSH="ssh"
+if [ -n "$SSHPASS" ] && command -v sshpass >/dev/null 2>&1; then
+  SSH="sshpass -e ssh -o StrictHostKeyChecking=no"
+fi
+
 rsync -az --delete \
   --exclude '.git' \
   --exclude 'node_modules' \
@@ -20,6 +26,6 @@ rsync -az --delete \
   --exclude 'uploads' \
   --exclude 'docker-compose.prod.yml' \
   --exclude '*.log' \
-  ./ "$HOST:$TARGET/"
+  -e "$SSH" ./ "$HOST:$TARGET/"
 
-ssh "$HOST" "cd $TARGET && docker compose -f docker-compose.prod.yml build backend frontend admin && docker compose -f docker-compose.prod.yml up -d && sleep 15 && docker compose -f docker-compose.prod.yml ps --format 'table {{.Name}}\t{{.Status}}'"
+$SSH "$HOST" "cd $TARGET && docker compose -f docker-compose.prod.yml build backend frontend admin && docker compose -f docker-compose.prod.yml up -d && sleep 15 && docker compose -f docker-compose.prod.yml ps --format 'table {{.Name}}\t{{.Status}}'"
