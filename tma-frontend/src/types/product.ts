@@ -16,12 +16,14 @@ export type ProductEditionCatalog = {
   ps_tr?: ProductEditionOption[]
   ps_ua?: ProductEditionOption[]
   xbox?: ProductEditionOption[]
+  xbox_tr?: ProductEditionOption[]
 }
 
 export interface ProductPrices {
   tr?: number
   ua?: number
   xbox?: number
+  xbox_tr?: number
   us?: number
   edition_catalog?: ProductEditionCatalog
 }

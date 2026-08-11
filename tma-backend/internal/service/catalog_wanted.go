@@ -522,6 +522,7 @@ func (s *CatalogParserService) resolveXboxWanted(ctx context.Context, want Wante
 	if IsAuxiliaryStoreItem(item.Title) {
 		return nil, false
 	}
+	s.attachXboxTurkeyPrice(ctx, item)
 	item.Title = CanonicalGameTitle(want.Title)
 	item.TitleKey = CatalogTitleKey(want.Title)
 	if item.Description != nil {

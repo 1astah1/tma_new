@@ -31,6 +31,16 @@ export function ProfilePage() {
         </Card>
 
         <div className="space-y-2">
+          {profile?.is_admin ? (
+            <button
+              onClick={() => nav('/manage')}
+              className="w-full flex items-center gap-3 p-4 rounded-xl border border-amber-500/40 bg-amber-500/10 transition-colors"
+            >
+              <span className="text-xl">🛠</span>
+              <span className="font-medium">Управление заказами</span>
+              <span className="ml-auto text-[var(--tg-hint)]">→</span>
+            </button>
+          ) : null}
           {/* <button
             onClick={() => nav('/orders')}
             className="w-full flex items-center gap-3 p-4 bg-[var(--tg-secondary)] rounded-xl border border-[var(--tg-border)] hover:bg-[var(--tg-card)] transition-colors"

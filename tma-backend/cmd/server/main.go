@@ -208,7 +208,7 @@ func main() {
 		r.Get("/content/shop-settings", contentHandler.ShopSettings)
 
 		// Payment details (public)
-		publicPaymentHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo)
+		publicPaymentHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo, adminRepo)
 		r.Get("/payments/details", publicPaymentHandler.GetPaymentDetails)
 
 		// Promo codes
@@ -251,9 +251,25 @@ func main() {
 				rateLimiter.Middleware(http.HandlerFunc(orderHandler.ConfirmBatchPayment)).ServeHTTP(w, r)
 			})
 
-			profileHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo)
+			profileHandler := public.NewProfileHandler(userRepo, orderRepo, settingsRepo, adminRepo)
 			r.Get("/profile", profileHandler.GetProfile)
 			r.Get("/payment-details", profileHandler.GetPaymentDetails)
+		})
+
+		// Админка внутри мини-аппа: те же обработчики, но вход по обычному
+		// токену Telegram — владельцу удобнее вести заказы с телефона.
+		r.Route("/tma-admin", func(r chi.Router) {
+			r.Use(middleware.TMAAdminAuth(authSvc, userRepo, adminRepo))
+
+			tmaOrders := admin.NewOrderHandler(orderSvc, orderRepo, adminRepo, encSvc, templateRepo)
+			r.Get("/orders", tmaOrders.List)
+			r.Get("/orders/{id}", tmaOrders.GetByID)
+			r.Patch("/orders/{id}/status", tmaOrders.UpdateStatus)
+			r.Get("/orders/{id}/chat", tmaOrders.GetChatMessages)
+			r.Post("/orders/{id}/chat", tmaOrders.SendChatMessage)
+
+			tmaDashboard := admin.NewDashboardHandler(orderSvc, catalogImportRepo)
+			r.Get("/dashboard", tmaDashboard.GetStats)
 		})
 
 		// Public FAQ (no auth required)

@@ -14,6 +14,7 @@ import { SupportPage } from './pages/SupportPage'
 import { RulesPage } from './pages/RulesPage'
 import { CartPage } from './pages/CartPage'
 import { WishlistPage } from './pages/WishlistPage'
+import { AdminPage } from './pages/AdminPage'
 import { ErrorBoundary } from './components/ui/ErrorBoundary'
 import { ToastProvider } from './components/ui/Toast'
 
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="rules" element={<RulesPage />} />
         <Route path="cart" element={<CartPage />} />
         <Route path="wishlist" element={<WishlistPage />} />
+        <Route path="manage" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -8,12 +8,13 @@ export const EDITION_PLATFORM_LABELS: Record<EditionPlatformKey, { title: string
   ps_tr: { title: 'PlayStation', region: 'Турция TR' },
   ps_ua: { title: 'PlayStation', region: 'Украина UA' },
   xbox: { title: 'Xbox/PC', region: 'США' },
+  xbox_tr: { title: 'Xbox/PC', region: 'Турция TR' },
 }
 
 function isEditionCatalog(value: unknown): value is ProductEditionCatalog {
   if (!value || typeof value !== 'object') return false
   const catalog = value as ProductEditionCatalog
-  return ['ps_tr', 'ps_ua', 'xbox'].some((key) => {
+  return ['ps_tr', 'ps_ua', 'xbox', 'xbox_tr'].some((key) => {
     const list = catalog[key as EditionPlatformKey]
     return Array.isArray(list) && list.length > 0
   })
@@ -45,6 +46,9 @@ function catalogFromRegionalPrices(
     const xboxPrice = prices.xbox ?? prices.us
     if (typeof xboxPrice === 'number' && isValidEditionPrice(xboxPrice)) {
       catalog.xbox = [{ id: 'standard', name: 'Standard Edition', price: xboxPrice }]
+    }
+    if (typeof prices.xbox_tr === 'number' && isValidEditionPrice(prices.xbox_tr)) {
+      catalog.xbox_tr = [{ id: 'standard', name: 'Standard Edition', price: prices.xbox_tr }]
     }
   }
 
@@ -85,7 +89,7 @@ function filterValidEditionCatalog(catalog: ProductEditionCatalog): ProductEditi
 }
 
 export function listEditionPlatforms(catalog: ProductEditionCatalog): EditionPlatformKey[] {
-  return (['ps_tr', 'ps_ua', 'xbox'] as EditionPlatformKey[]).filter(
+  return (['ps_tr', 'ps_ua', 'xbox', 'xbox_tr'] as EditionPlatformKey[]).filter(
     (key) => (catalog[key]?.length ?? 0) > 0,
   )
 }
@@ -101,13 +105,13 @@ export function productPlatformFamily(platform: string): ProductPlatformFamily {
 
 export function editionKeyMatchesFamily(key: EditionPlatformKey, family: ProductPlatformFamily): boolean {
   if (family === 'ps') return key === 'ps_tr' || key === 'ps_ua'
-  if (family === 'xbox' || family === 'pc') return key === 'xbox'
+  if (family === 'xbox' || family === 'pc') return key === 'xbox' || key === 'xbox_tr'
   return false
 }
 
 export function hasMultiPlatformEditionCatalog(catalog: ProductEditionCatalog): boolean {
   const hasPs = (catalog.ps_tr?.length ?? 0) > 0 || (catalog.ps_ua?.length ?? 0) > 0
-  const hasXbox = (catalog.xbox?.length ?? 0) > 0
+  const hasXbox = (catalog.xbox?.length ?? 0) > 0 || (catalog.xbox_tr?.length ?? 0) > 0
   return hasPs && hasXbox
 }
 
@@ -122,7 +126,7 @@ export function getPricePlatformFamilies(
     if ((catalog.ps_tr?.length ?? 0) > 0 || (catalog.ps_ua?.length ?? 0) > 0) {
       families.add('ps')
     }
-    if ((catalog.xbox?.length ?? 0) > 0) {
+    if ((catalog.xbox?.length ?? 0) > 0 || (catalog.xbox_tr?.length ?? 0) > 0) {
       families.add('xbox')
     }
   }
@@ -135,7 +139,7 @@ export function getPricePlatformFamilies(
     ) {
       families.add('ps')
     }
-    const xboxPrice = parsed.xbox ?? parsed.us
+    const xboxPrice = parsed.xbox ?? parsed.us ?? parsed.xbox_tr
     if (typeof xboxPrice === 'number' && isValidEditionPrice(xboxPrice)) {
       families.add('xbox')
     }
@@ -229,7 +233,10 @@ export function findEdition(
 export function editionRegionLabel(platform: EditionPlatformKey): string {
   const meta = EDITION_PLATFORM_LABELS[platform]
   if (platform === 'xbox') {
-    return 'XBOX/PC [US]'
+    return 'XBOX/PC [США]'
+  }
+  if (platform === 'xbox_tr') {
+    return 'XBOX/PC [ТУРЦИЯ]'
   }
   return `${meta.title.toUpperCase()} [${meta.region.toUpperCase()}]`
 }

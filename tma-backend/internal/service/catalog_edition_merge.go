@@ -20,6 +20,7 @@ type parsedProductPrices struct {
 	TR             *float64          `json:"tr"`
 	UA             *float64          `json:"ua"`
 	Xbox           *float64          `json:"xbox"`
+	XboxTR         *float64          `json:"xbox_tr"`
 	US             *float64          `json:"us"`
 	EditionCatalog editionCatalogMap `json:"edition_catalog"`
 }
@@ -116,6 +117,9 @@ func catalogFromProductPrices(prices parsedProductPrices, platform domain.Platfo
 		if price > 0 {
 			appendSimplePrice(catalog, "xbox", price)
 		}
+		if prices.XboxTR != nil && *prices.XboxTR > 0 {
+			appendSimplePrice(catalog, "xbox_tr", *prices.XboxTR)
+		}
 	}
 	return catalog
 }
@@ -148,7 +152,7 @@ func MergeProductPrices(products []domain.Product) json.RawMessage {
 	}
 
 	merged := editionCatalogMap{}
-	var tr, ua, xbox, us *float64
+	var tr, ua, xbox, xboxTR, us *float64
 	titleKey := ""
 
 	for _, product := range products {
@@ -171,6 +175,10 @@ func MergeProductPrices(products []domain.Product) json.RawMessage {
 		if prices.UA != nil {
 			v := *prices.UA
 			ua = &v
+		}
+		if prices.XboxTR != nil {
+			v := *prices.XboxTR
+			xboxTR = &v
 		}
 		if prices.Xbox != nil {
 			v := *prices.Xbox
@@ -202,6 +210,9 @@ func MergeProductPrices(products []domain.Product) json.RawMessage {
 	}
 	if xbox != nil {
 		out["xbox"] = *xbox
+	}
+	if xboxTR != nil {
+		out["xbox_tr"] = *xboxTR
 	}
 	if us != nil {
 		out["us"] = *us
